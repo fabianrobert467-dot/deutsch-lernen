@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Deutsch B2→C1 — 45天通关计划</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#1a1a2e;color:#e0dcd0;display:flex;height:100vh;overflow:hidden}
@@ -121,11 +124,35 @@ textarea{resize:vertical;min-height:80px}
   .flashcard{min-height:120px}
   .flashcard .front .word{font-size:1.2em}
 }
+/* Auth UI */
+.auth-section{border-top:1px solid #0f3460;margin-top:16px;padding-top:10px}
+.auth-email{font-size:.7em;color:#7b8db5;word-break:break-all;margin:4px 0}
+.sync-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}
+.sync-online{background:#22c55e}.sync-offline{background:#ef4444}.sync-syncing{background:#f39c12}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:2000;justify-content:center;align-items:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#16213e;border:1px solid #e94560;border-radius:12px;padding:24px;max-width:360px;width:90%}
+.modal-box h3{color:#e94560;margin-bottom:12px;text-align:center}
+.modal-box input{width:100%;margin:6px 0;padding:10px 14px}
+.modal-box .btn{width:100%;margin:6px 0}
+.modal-close{float:right;background:none;border:none;color:#7b8db5;font-size:1.2em;cursor:pointer}
+.modal-close:hover{color:#e94560}
 </style>
 </head>
 <body>
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
-<div class="sidebar" id="sidebar"><h2>🇩🇪 B2→C1 Trainer</h2><div id="nav-list"></div></div>
+<div class="sidebar" id="sidebar"><h2>🇩🇪 B2→C1 Trainer</h2><div id="nav-list"></div>
+<div class="auth-section" id="auth-section">
+  <div id="auth-logged-out">
+    <button class="btn btn-red" style="width:100%;font-size:.78em" onclick="showAuthModal()">☁️ 登录 / 注册</button>
+    <div style="font-size:.65em;color:#7b8db5;text-align:center;margin-top:4px">登录后跨设备同步</div>
+  </div>
+  <div id="auth-logged-in" style="display:none">
+    <div style="display:flex;align-items:center;gap:6px"><span class="sync-dot sync-online" id="sync-dot"></span><span style="font-size:.7em;color:#22c55e" id="sync-status">已同步</span></div>
+    <div class="auth-email" id="auth-email-display"></div>
+    <button class="btn btn-outline" style="width:100%;font-size:.7em;margin-top:4px" onclick="logout()">🚪 退出登录</button>
+  </div>
+</div></div>
 <div class="main">
 <div class="topbar">
   <button class="hamburger" onclick="toggleSidebar()" title="Menu">☰</button>
@@ -142,6 +169,161 @@ textarea{resize:vertical;min-height:80px}
 </div>
 
 <script>
+// ===== FIREBASE INIT & CLOUD SYNC =====
+firebase.initializeApp({
+  apiKey: "AIzaSyD-DXaaYDS5CIPS4-Yqps7G9fsuQ9wbELg",
+  authDomain: "deutsch-lernen-3bad7.firebaseapp.com",
+  projectId: "deutsch-lernen-3bad7",
+  storageBucket: "deutsch-lernen-3bad7.firebasestorage.app",
+  messagingSenderId: "654638229070",
+  appId: "1:654638229070:web:e5c66a8dd016956417c51f"
+});
+var db = firebase.firestore();
+var auth = firebase.auth();
+var currentUser = null;
+var _syncIgnore = false;  // prevent onSnapshot loop when we're the pusher
+
+// Auth UI
+window.showAuthModal = function() { document.getElementById('auth-modal').classList.add('open'); };
+window.hideAuthModal = function() { document.getElementById('auth-modal').classList.remove('open'); var e=document.getElementById('auth-error'); if(e)e.style.display='none'; };
+
+window.register = function() {
+  var em = document.getElementById('auth-email-input').value.trim();
+  var pw = document.getElementById('auth-password-input').value;
+  var er = document.getElementById('auth-error');
+  if (!em || !pw || pw.length < 6) { er.textContent = 'Bitte gültige Email und Passwort (min. 6 Zeichen) eingeben.'; er.style.display='block'; return; }
+  auth.createUserWithEmailAndPassword(em, pw).then(function(){ hideAuthModal(); }).catch(function(e){ er.textContent = '❌ ' + e.message; er.style.display='block'; });
+};
+
+window.login = function() {
+  var em = document.getElementById('auth-email-input').value.trim();
+  var pw = document.getElementById('auth-password-input').value;
+  var er = document.getElementById('auth-error');
+  if (!em || !pw) { er.textContent = 'Bitte Email und Passwort eingeben.'; er.style.display='block'; return; }
+  auth.signInWithEmailAndPassword(em, pw).then(function(){ hideAuthModal(); }).catch(function(e){ er.textContent = '❌ ' + e.message; er.style.display='block'; });
+};
+
+window.logout = function() { auth.signOut(); };
+
+function setSyncUI(user) {
+  currentUser = user;
+  document.getElementById('auth-logged-out').style.display = user ? 'none' : 'block';
+  document.getElementById('auth-logged-in').style.display = user ? 'block' : 'none';
+  if (user) document.getElementById('auth-email-display').textContent = user.email;
+}
+
+function setSyncDot(s) {
+  var d = document.getElementById('sync-dot'); var t = document.getElementById('sync-status');
+  if (!d) return;
+  d.className = 'sync-dot sync-' + s;
+  if (t) t.textContent = s === 'online' ? '已同步' : s === 'syncing' ? '同步中...' : '离线';
+}
+
+// Collect all de-* data from localStorage
+function collectAllData() {
+  var data = {};
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf('de-') === 0) {
+      try { data[k] = JSON.parse(localStorage.getItem(k)); } catch(e) { data[k] = localStorage.getItem(k); }
+    }
+  }
+  return data;
+}
+
+// Write all data to localStorage from a data object
+function applyCloudData(data) {
+  for (var k in data) {
+    if (k.indexOf('de-') !== 0) continue;
+    var v = data[k];
+    var s = typeof v === 'string' ? v : JSON.stringify(v);
+    try {
+      // Only update if different
+      var cur = localStorage.getItem(k);
+      if (cur !== s) localStorage.setItem(k, s);
+    } catch(e) {}
+  }
+}
+
+// Push local data to cloud
+function pushToCloud() {
+  if (!currentUser) return;
+  var data = collectAllData();
+  data._updated = firebase.firestore.FieldValue.serverTimestamp();
+  _syncIgnore = true;
+  setSyncDot('syncing');
+  db.collection('users').doc(currentUser.uid).set(data, {merge: true}).then(function(){
+    setSyncDot('online');
+    _syncIgnore = false;
+  }).catch(function(e){
+    console.error('Sync push failed:', e);
+    setSyncDot('offline');
+    _syncIgnore = false;
+  });
+}
+
+// Debounced push
+var _syncTimer = null;
+function schedulePush() {
+  if (!currentUser) return;
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(pushToCloud, 1500);
+}
+
+// Pull cloud data and merge into localStorage
+function pullAndMerge(user) {
+  setSyncDot('syncing');
+  db.collection('users').doc(user.uid).get().then(function(doc){
+    if (!doc.exists) { pushToCloud(); return; }
+    var remote = doc.data();
+    var local = collectAllData();
+    // Merge: remote wins, but keep keys that only exist locally
+    for (var rk in remote) {
+      if (rk.indexOf('de-') !== 0) continue;
+      var rv = typeof remote[rk] === 'string' ? remote[rk] : JSON.stringify(remote[rk]);
+      var lv = localStorage.getItem(rk);
+      if (rv !== lv) localStorage.setItem(rk, rv);
+    }
+    // Push local-only keys to cloud
+    var hasLocalOnly = false;
+    for (var lk in local) {
+      if (!(lk in remote)) { hasLocalOnly = true; break; }
+    }
+    if (hasLocalOnly) pushToCloud();
+    setSyncDot('online');
+    loadProgress();
+    renderNav();
+    renderContent();
+  }).catch(function(e){
+    console.error('Pull failed:', e);
+    setSyncDot('offline');
+  });
+}
+
+// Auth state changes
+auth.onAuthStateChanged(function(user) {
+  setSyncUI(user);
+  if (user) {
+    // Listen for remote changes
+    db.collection('users').doc(user.uid).onSnapshot(function(doc){
+      if (_syncIgnore) { _syncIgnore = false; return; }
+      if (!doc.exists) return;
+      applyCloudData(doc.data());
+      loadProgress();
+      renderNav();
+      renderContent();
+      setSyncDot('online');
+    }, function(e){ setSyncDot('offline'); });
+    // Initial pull
+    pullAndMerge(user);
+  } else {
+    setSyncDot('offline');
+    loadProgress();
+    renderNav();
+    renderContent();
+  }
+});
+
 // ===== EXAM DATES =====
 const B2_DATE = new Date();
 B2_DATE.setDate(B2_DATE.getDate() + 15);
@@ -161,6 +343,7 @@ function getStudyDay() {
 function setStudyDay(n) {
   n = Math.max(1, Math.min(45, parseInt(n)||1));
   localStorage.setItem('de-daynum', String(n));
+  schedulePush();
   renderContent();
 }
 function advanceDay() {
@@ -267,7 +450,7 @@ function renderNav() {
 function goPage(id) { currentPage = id; renderNav(); renderContent(); document.getElementById('content').scrollTop = 0; if (window.innerWidth <= 768) closeSidebar(); }
 function toggleSidebar() { var sb = document.getElementById('sidebar'); var bd = document.getElementById('sidebar-backdrop'); if (sb.classList.contains('open')) { closeSidebar(); } else { sb.classList.add('open'); bd.classList.add('open'); } }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-backdrop').classList.remove('open'); }
-function markDone(id) { completed.add(id); localStorage.setItem('de-done', JSON.stringify([...completed])); updateStreak(); renderNav(); updateProgress(); }
+function markDone(id) { completed.add(id); localStorage.setItem('de-done', JSON.stringify([...completed])); schedulePush(); updateStreak(); renderNav(); updateProgress(); }
 function updateProgress() {
   let studyPages = nav.filter(n => n.id !== 'home' && n.id !== 'roadmap' && n.id !== 'daily' && n.id !== 'exam_tips');
   let pct = Math.round((completed.size / studyPages.length) * 100);
@@ -282,7 +465,7 @@ function updateStreak() {
     let yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     if (lastStudyDate === yesterday) streakDays++; else if (lastStudyDate !== today) streakDays = 1;
     lastStudyDate = today;
-    localStorage.setItem('de-streak', JSON.stringify({days:streakDays, date:lastStudyDate}));
+    localStorage.setItem('de-streak', JSON.stringify({days:streakDays, date:lastStudyDate})); schedulePush();
   }
   let el = document.getElementById('streak-text'); if (el) el.textContent = streakDays;
 }
@@ -304,7 +487,7 @@ function loadSkills() {
   try { skillScores = JSON.parse(localStorage.getItem('de-skills') || '{}'); } catch(e) { skillScores = {}; }
   try { weeklyHistory = JSON.parse(localStorage.getItem('de-weekly') || '[]'); } catch(e) { weeklyHistory = []; }
 }
-function saveSkills() { localStorage.setItem('de-skills', JSON.stringify(skillScores)); }
+function saveSkills() { localStorage.setItem('de-skills', JSON.stringify(skillScores)); schedulePush(); }
 
 function recordSkillScore(skill, correct, total) {
   if (!skillScores[skill]) skillScores[skill] = {correct:0, total:0};
@@ -359,12 +542,12 @@ function generateWeeklyReport() {
   var report = {week:week, date: new Date().toISOString().split('T')[0], day:day, words:wordsLearned, errorsTotal:errorsTotal, errorsActive:errorsActive, skills:skillSummary};
   weeklyHistory.push(report);
   if (weeklyHistory.length > 15) weeklyHistory.shift();
-  localStorage.setItem('de-weekly', JSON.stringify(weeklyHistory));
+  localStorage.setItem('de-weekly', JSON.stringify(weeklyHistory)); schedulePush();
   return report;
 }
 
-function saveVocabMastered() { localStorage.setItem('de-vocab', JSON.stringify(vocabMastered)); }
-function saveDailyChecklist() { localStorage.setItem('de-daily', JSON.stringify(dailyChecklist)); }
+function saveVocabMastered() { localStorage.setItem('de-vocab', JSON.stringify(vocabMastered)); schedulePush(); }
+function saveDailyChecklist() { localStorage.setItem('de-daily', JSON.stringify(dailyChecklist)); schedulePush(); }
 
 // ===== SRS (Spaced Repetition System) =====
 // Interval progression (days): 1→2→4→7→14→30→60
@@ -376,7 +559,7 @@ function loadWeeklyReport() {}
 function loadSRS() {
   try { srsData = JSON.parse(localStorage.getItem('de-srs') || '{}'); } catch(e) { srsData = {}; }
 }
-function saveSRS() { localStorage.setItem('de-srs', JSON.stringify(srsData)); }
+function saveSRS() { localStorage.setItem('de-srs', JSON.stringify(srsData)); schedulePush(); }
 function srsNextInterval(stage) { return SRS_INTERVALS[Math.min(stage, SRS_INTERVALS.length - 1)]; }
 
 // Called when user marks a word/VBP as learned or answers correctly
@@ -1719,7 +1902,7 @@ window.showDailyReadingResult = function() {
     date: new Date().toISOString().split('T')[0],
     score: score, total: total, pct: pct,
     readingId: state.readingId
-  }));
+  })); schedulePush();
 
   var el = document.getElementById(prefix + '-result');
   el.style.display = 'block';
@@ -1781,7 +1964,7 @@ function saveDailyTestResult(scores) {
   localStorage.setItem('de-test-done-' + day, JSON.stringify({
     date: new Date().toISOString().split('T')[0],
     scores: scores
-  }));
+  })); schedulePush();
 }
 
 // Generate tomorrow's focus based on today's test
@@ -2175,7 +2358,7 @@ const c1TestQs = [
 function loadErrorBank() {
   try { return JSON.parse(localStorage.getItem('de-errorbank') || '{}'); } catch(e) { return {}; }
 }
-function saveErrorBank(bank) { localStorage.setItem('de-errorbank', JSON.stringify(bank)); }
+function saveErrorBank(bank) { localStorage.setItem('de-errorbank', JSON.stringify(bank)); schedulePush(); }
 function addError(type, question, options, correctIdx, userAnswer, explanation, topic) {
   let bank = loadErrorBank();
   let id = 'err-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
@@ -2261,7 +2444,7 @@ window.answerTestQ = function(el) {
       state: window.testState[prefix],
       score: window.testScores[prefix] || 0,
       day: getStudyDay()
-    }));
+    })); schedulePush();
   }
 };
 
@@ -3134,5 +3317,18 @@ window.importAllData = function() {
 function init() { loadProgress(); renderNav(); renderContent(); }
 init();
 </script>
+<div class="modal-overlay" id="auth-modal">
+<div class="modal-box">
+  <button class="modal-close" onclick="hideAuthModal()">✕</button>
+  <h3 id="auth-modal-title">☁️ 登录同步</h3>
+  <p style="color:#c8d0dc;font-size:.8em;text-align:center;margin-bottom:10px" id="auth-modal-desc">登录后所有学习数据自动同步到云端，手机电脑实时共享进度。</p>
+  <input type="email" id="auth-email-input" placeholder="Email">
+  <input type="password" id="auth-password-input" placeholder="Passwort (min. 6 Zeichen)">
+  <div id="auth-error" style="color:#ef4444;font-size:.78em;margin:4px 0;display:none"></div>
+  <button class="btn btn-red" id="auth-btn-login" onclick="login()">🔐 登录</button>
+  <button class="btn btn-outline" id="auth-btn-register" onclick="register()">📝 注册新账号</button>
+  <p style="color:#7b8db5;font-size:.68em;text-align:center;margin-top:8px">数据保存在 Firebase (europe-west)，总大小约 10–50 KB，永久免费。</p>
+</div>
+</div>
 </body>
 </html>
