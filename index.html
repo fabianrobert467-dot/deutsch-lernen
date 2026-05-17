@@ -3091,9 +3091,7 @@ function checkWriting() {
 
 // ===== PWA: Service Worker (offline cache) =====
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  var swCode = 'self.addEventListener("install",function(e){e.waitUntil(caches.open("de-v1").then(function(c){return c.addAll(["/"])}));self.skipWaiting()});self.addEventListener("activate",function(e){e.waitUntil(clients.claim())});self.addEventListener("fetch",function(e){e.respondWith(caches.match(e.request).then(function(r){return r||fetch(e.request).then(function(resp){if(resp.ok){var clone=resp.clone();caches.open("de-v1").then(function(c){c.put(e.request,clone)});}return resp})}))});';
-  var swBlob = new Blob([swCode], {type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(swBlob), {scope:'/'}).catch(function(){});
+  navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 
 // ===== Data Sync: Export/Import for cross-device sync =====
