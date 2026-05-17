@@ -203,6 +203,14 @@ window.login = function() {
   auth.signInWithEmailAndPassword(em, pw).then(function(){ hideAuthModal(); }).catch(function(e){ er.textContent = '❌ ' + e.message; er.style.display='block'; });
 };
 
+window.loginWithGoogle = function() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).then(function(){ hideAuthModal(); }).catch(function(e){
+    document.getElementById('auth-error').textContent = '❌ ' + e.message;
+    document.getElementById('auth-error').style.display = 'block';
+  });
+};
+
 window.logout = function() { auth.signOut(); };
 
 function setSyncUI(user) {
@@ -3327,6 +3335,8 @@ init();
   <div id="auth-error" style="color:#ef4444;font-size:.78em;margin:4px 0;display:none"></div>
   <button class="btn btn-red" id="auth-btn-login" onclick="login()">🔐 登录</button>
   <button class="btn btn-outline" id="auth-btn-register" onclick="register()">📝 注册新账号</button>
+  <div style="text-align:center;color:#7b8db5;font-size:.7em;margin:8px 0">— oder —</div>
+  <button class="btn" style="width:100%;background:#fff;color:#333;font-weight:bold" onclick="loginWithGoogle()">🔵 用 Google 账号登录</button>
   <p style="color:#7b8db5;font-size:.68em;text-align:center;margin-top:8px">数据保存在 Firebase (europe-west)，总大小约 10–50 KB，永久免费。</p>
 </div>
 </div>
