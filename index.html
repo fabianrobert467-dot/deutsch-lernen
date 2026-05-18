@@ -691,6 +691,187 @@ function getSRSCount() {
 // Get total SRS-tracked items
 function getSRSTotal() { return Object.keys(srsData).length; }
 
+// ===== B2 SPRINT PLAN (ADAPTIVE) =====
+var SPRINT_GRAMMAR_TOPICS = [
+  {id:'grammar_nominal', name:'Nominalisierung', emoji:'📝', page:'grammar_nominal', skillPage:'unicert_skill_grammar', desc:'从句→名词短语转换训练'},
+  {id:'grammar_partizip', name:'Partizipialattribute', emoji:'📖', page:'grammar_partizip', skillPage:'unicert_skill_grammar', desc:'分词定语识别与拆解为Relativsatz'},
+  {id:'grammar_passiv', name:'Passiv & Ersatzformen', emoji:'🔄', page:'grammar_passiv', skillPage:'unicert_skill_grammar', desc:'主动/被动/替代形式互换训练'},
+  {id:'grammar_konjunktiv2', name:'Konjunktiv II', emoji:'💭', page:'grammar_konjunktiv2', skillPage:'unicert_skill_grammar', desc:'KII Gegenwart vs Vergangenheit 对比'},
+  {id:'grammar_fvg', name:'Nomen-Verb-Verbindungen', emoji:'🔗', page:'grammar_fvg', skillPage:'unicert_skill_grammar', desc:'Funktionsverbgefüge识别与替换'},
+  {id:'grammar_konjunktiv1', name:'Konjunktiv I', emoji:'📰', page:'grammar_konjunktiv1', skillPage:'unicert_skill_grammar', desc:'Indirekte Rede 识别与改写'}
+];
+
+function loadSprintPlan() {
+  try {
+    var p = JSON.parse(localStorage.getItem('de-sprint-b2') || 'null');
+    if (!p) { p = {mock1:null, mock2:null, startDate: new Date().toISOString().split('T')[0]}; saveSprintPlan(p); }
+    return p;
+  } catch(e) { return {mock1:null, mock2:null}; }
+}
+function saveSprintPlan(p) { localStorage.setItem('de-sprint-b2', JSON.stringify(p)); schedulePush(); }
+
+function recordSprintMock(level, prefix) {
+  if (level !== 'B2') return;
+  var p = loadSprintPlan();
+  var scoreR = window.testScores[prefix+'_r'] || 0;
+  var scoreG = window.testScores[prefix+'_g'] || 0;
+  var totalR = window.testState[prefix+'_r'] ? window.testState[prefix+'_r'].questions.length : 5;
+  var totalG = window.testState[prefix+'_g'] ? window.testState[prefix+'_g'].questions.length : 8;
+  var result = {
+    date: new Date().toISOString().split('T')[0],
+    reading: {score:scoreR, total:totalR, pct:Math.round(scoreR/Math.max(1,totalR)*100)},
+    grammar: {score:scoreG, total:totalG, pct:Math.round(scoreG/Math.max(1,totalG)*100)},
+    overall: Math.round((scoreR+scoreG)/Math.max(1,totalR+totalG)*100)
+  };
+  if (!p.mock1) { p.mock1 = result; }
+  else if (!p.mock2) { p.mock2 = result; }
+  else { p.mock1 = p.mock2; p.mock2 = result; }
+  saveSprintPlan(p);
+  recordSkillScore('grammatik', scoreG, totalG);
+  recordSkillScore('lesen', scoreR, totalR);
+}
+
+function getSprintDayTasks(day, mock1, mock2) {
+  var gt = SPRINT_GRAMMAR_TOPICS;
+  if (day === 1) {
+    return {
+      title: '诊断日：全真模拟+定位弱项',
+      phase: '🟢',
+      tasks: [
+        {text:'完成B2全真模拟考试（计时135分钟）', page:'unicert_b2_mock', important:true},
+        {text:'记录阅读、语法得分，系统自动分析弱项并生成后续计划', page:null},
+        {text:'错题自动存入错题本，晚间回顾', page:'error_review'},
+        {text:'对照范文自评写作：检查Redemittel、KII、结构完整性', page:'unicert_b2_writing'},
+        {text:'完成后刷新本页，系统自动生成 Days 2-7 个性化任务', page:null}
+      ]
+    };
+  }
+
+  if (day >= 2 && day <= 7) {
+    if (!mock1) {
+      return {title:'待解锁', phase:'🔒', tasks:[{text:'请先完成 Day 1 诊断模拟考试，完成后系统将自动生成个性化冲刺计划。', page:'unicert_b2_mock', important:true}]};
+    }
+    var rp = mock1.reading.pct;
+    var gp = mock1.grammar.pct;
+    var weakerFirst = rp <= gp;
+
+    // Build 6-day plan based on mock1 results
+    var dayPlans = [];
+    if (gp < 60 && rp < 60) {
+      dayPlans = weakerFirst ?
+        [{t:'reading',ti:'阅读策略：限时训练'},{t:'grammar',ti:gt[0].name,top:0},{t:'reading',ti:'阅读突破：长难句拆解'},{t:'grammar',ti:gt[1].name,top:1},{t:'reading',ti:'阅读策略：信息检索'},{t:'mixed',ti:'综合强化：错题清零'}]
+        : [{t:'grammar',ti:gt[0].name,top:0},{t:'reading',ti:'阅读策略：限时训练'},{t:'grammar',ti:gt[1].name,top:1},{t:'reading',ti:'阅读突破：长难句拆解'},{t:'grammar',ti:gt[2].name,top:2},{t:'mixed',ti:'综合强化：错题清零'}];
+    } else if (gp < 60) {
+      dayPlans = [{t:'grammar',ti:gt[0].name,top:0},{t:'grammar',ti:gt[1].name,top:1},{t:'grammar',ti:gt[2].name,top:2},{t:'grammar',ti:gt[3].name,top:3},{t:'reading',ti:'阅读保持：限时训练'},{t:'mixed',ti:'巩固日：错题清零+词汇强化'}];
+    } else if (rp < 60) {
+      dayPlans = [{t:'reading',ti:'Teil 1 标题匹配特训'},{t:'reading',ti:'Teil 2 判断正误特训'},{t:'reading',ti:'Teil 3 信息检索特训'},{t:'reading',ti:'限时全篇模拟训练'},{t:'grammar',ti:gt[0].name,top:0},{t:'mixed',ti:'巩固日：错题清零+语法复习'}];
+    } else {
+      dayPlans = [{t:'grammar',ti:gt[2].name,top:2},{t:'reading',ti:'阅读提速：限时挑战'},{t:'grammar',ti:gt[3].name,top:3},{t:'writing',ti:'写作强化：限时练笔'},{t:'vocab',ti:'词汇冲刺：5大主题闪卡'},{t:'mixed',ti:'综合排查：薄弱点扫描'}];
+    }
+
+    var dp = dayPlans[day - 2];
+    var tasks = [];
+    if (dp.t === 'grammar') {
+      var top = gt[dp.top];
+      tasks.push({text:top.desc + ' — 完成专项突破中对应模块全部题目', page:top.skillPage, important:true});
+      tasks.push({text:'深入练习「'+top.name+'」专题页面', page:top.page});
+      tasks.push({text:'自编5个含「'+top.name+'」的句子并自查', page:null});
+      tasks.push({text:'阅读1篇德语文章，圈出所有「'+top.name+'」结构', page:'daily_reading'});
+      tasks.push({text:'目标：'+top.name+' 正确率 > 80%', page:null});
+    } else if (dp.t === 'reading') {
+      tasks.push({text:'完成1篇UNIcert风格阅读，严格计时', page:'unicert_b2_reading', important:true});
+      tasks.push({text:'再练1篇阅读（从reading模块中选未做过的）', page:'reading1'});
+      tasks.push({text:'训练三步法：略读(2min)→寻读(3min)→精读(3min)', page:null});
+      tasks.push({text:'整理今日阅读中遇到的10个生词到闪卡', page:'vocab_flashcards'});
+      tasks.push({text:'目标：阅读正确率 > 70%', page:null});
+    } else if (dp.t === 'writing') {
+      tasks.push({text:'限时60分钟完成1篇正式信函/Erörterung', page:'writing_b2_prompt', important:true});
+      tasks.push({text:'对照范文自查：Redemittel多样性、KII、结构完整性', page:'unicert_b2_writing'});
+      tasks.push({text:'抄写背诵5个核心Redemittel', page:'writing_redemittel'});
+      tasks.push({text:'改写旧作文：用Nominalisierung替代至少3个从句', page:null});
+      tasks.push({text:'目标：字数达标(200-300词)，结构完整', page:null});
+    } else if (dp.t === 'vocab') {
+      tasks.push({text:'B2全部5个主题闪卡限时复习', page:'vocab_flashcards', important:true});
+      tasks.push({text:'重点攻克：Beruf & Arbeit 相关词汇', page:'vocab_b2_beruf'});
+      tasks.push({text:'重点攻克：Medien & Kommunikation 相关词汇', page:'vocab_b2_medien'});
+      tasks.push({text:'默写今日遇到的高频词汇30个', page:null});
+      tasks.push({text:'目标：闪卡正确率 > 85%', page:null});
+    } else {
+      tasks.push({text:'错题本回顾：完成所有待复习错题', page:'error_review', important:true});
+      tasks.push({text:'间隔复习：完成所有到期SRS卡片', page:'srs_review'});
+      tasks.push({text:'语法薄弱点快速重测', page:'grammar_quiz'});
+      tasks.push({text:'阅读保持：完成1篇限时阅读', page:'daily_reading'});
+      tasks.push({text:'晚间：整理「考前一张纸」— 核心语法点+Redemittel', page:null});
+    }
+    return {title: dp.ti, phase: '🟡', tasks: tasks};
+  }
+
+  if (day === 8) {
+    return {
+      title: '第二次全真模拟考试',
+      phase: '🟠',
+      tasks: [
+        {text:'上午：完整B2模拟（严格计时，不间断）', page:'unicert_b2_mock', important:true},
+        {text:'阅读(45min) → 语法(20min) → 写作(60min)', page:null},
+        {text:'下午：逐题分析错因，与第一次模拟对比', page:'error_review'},
+        {text:'系统自动对比两次模拟，定位顽固弱项', page:null},
+        {text:'目标：总分 > 60%（通过线）', page:null}
+      ]
+    };
+  }
+
+  if (day >= 9 && day <= 10) {
+    if (!mock2) {
+      return {title:'待解锁', phase:'🔒', tasks:[{text:'请先完成 Day 8 第二次模拟考试。', page:'unicert_b2_mock', important:true}]};
+    }
+    var improved = mock1 ? (mock2.overall - mock1.overall) : 0;
+    var trendText = improved > 10 ? '🎉 比第一次进步' + improved + '分！继续保持！' : (improved >= 0 ? '📊 与第一次基本持平，重点攻克顽固弱项' : '⚠️ 第二次有退步，必须排查失分原因');
+
+    if (day === 9) {
+      var t9 = [];
+      t9.push({text:'错题清零行动：完成error_review中所有UNIcert错题', page:'error_review', important:true});
+      if (mock1 && mock2) {
+        if (mock2.reading.pct < 70 || mock2.grammar.pct < 70) {
+          var weakLabel = mock2.reading.pct < mock2.grammar.pct ? '阅读' : '语法';
+          var weakPage = weakLabel === '阅读' ? 'unicert_skill_reading' : 'unicert_skill_grammar';
+          t9.push({text:'顽固弱项补强：'+weakLabel+'专项突破（回到对应模块）', page:weakPage});
+        }
+      }
+      t9.push({text:'写作实战：限时60分钟完成1篇Beschwerdebrief', page:'writing_b2_prompt'});
+      t9.push({text:'对照范文逐句修改润色', page:'unicert_b2_writing'});
+      t9.push({text:trendText, page:null});
+      return {title: '冲刺日：错题清零 + 顽固弱项补强', phase: '🟠', tasks: t9};
+    }
+
+    var t10 = [];
+    var weakestNow = (!mock2 ? null : (mock2.reading.pct < mock2.grammar.pct ? 'reading' : 'grammar'));
+    t10.push({text: weakestNow === 'reading' ? '重点模块重测：限时完成B2阅读样题' : '重点模块重测：完成B2语法样题', page: weakestNow === 'reading' ? 'unicert_b2_reading' : 'unicert_b2_grammar', important:true});
+    t10.push({text:'制作「考前一张纸」：20个核心语法点 + 10个万能Redemittel', page:'writing_redemittel'});
+    t10.push({text:'易错词汇清单默写（从错题本提取高频错误）', page:'error_review'});
+    t10.push({text:'口语模板背诵：3个热门话题各练2遍', page:'unicert_b2_speaking'});
+    t10.push({text:mock2 && mock2.overall < 60 ? '⚠️ 仍未达通过线，今晚重点攻克最弱模块' : '✅ 已达通过线，稳住节奏即可', page:null});
+    return {title: '最终冲刺：考前一张纸 + 口语模板', phase: '🟠', tasks: t10};
+  }
+
+  if (day === 11) {
+    return {title: '总复习 + 心态调整', phase: '🔴', tasks: [
+      {text:'上午：「考前一张纸」反复默写（闭卷）', page:null},
+      {text:'核心语法快速过：KII表格、Passiv各时态、Nominalisierung规则', page:'grammar_b2'},
+      {text:'写作押题：准备数字化/环境/教育3个热门话题模板', page:'unicert_b2_writing'},
+      {text:'下午：只看对的，不做新题不刷难题', page:null},
+      {text:'晚上：准备考试物品（身份证/准考证/笔/手表/水），早睡', page:null}
+    ]};
+  }
+
+  return {title: '考前放松 (5.29)', phase: '⚪', tasks: [
+    {text:'仅复习：「考前一张纸」+ Redemittel', page:null},
+    {text:'不做新题！不做难题！保持手感即可', page:null},
+    {text:'散步/运动30分钟，保持心态平稳', page:null},
+    {text:'检查：身份证/准考证/笔/手表/水', page:null},
+    {text:'晚上9点前入睡，保证8小时睡眠', page:null}
+  ]};
+}
+
 function renderFlashcard(deckId, words) {
   if (!flashcardIdx[deckId]) flashcardIdx[deckId] = 0;
   let idx = flashcardIdx[deckId];
@@ -1520,32 +1701,45 @@ const unicertC1Writing = {
 // B2 Full Mock Exam (timed)
 const unicertB2MockData = {
   reading: {
-    title: "📖 Leseverstehen (30 Pkt, 50 Min)",
+    title: "📖 Leseverstehen — 30 Pkt / 50 Min",
     text: "Der deutsche Wohnungsmarkt ist in den Ballungszentren seit Jahren angespannt. In Städten wie München, Frankfurt und Berlin sind die Mieten innerhalb eines Jahrzehnts um durchschnittlich 40 Prozent gestiegen. Als Hauptursache gilt die wachsende Nachfrage: Immer mehr Menschen ziehen vom Land in die Städte, während gleichzeitig der Wohnungsneubau mit der Nachfrage nicht Schritt hält.\n\nDie Bundesregierung hat reagiert und eine Reihe von Maßnahmen ergriffen. Dazu gehören die Einführung der Mietpreisbremse, die Erhöhung des Wohngeldes und die Förderung des sozialen Wohnungsbaus. Die Mietpreisbremse, die 2015 eingeführt wurde, begrenzt den Mietanstieg bei Wiedervermietung auf maximal zehn Prozent über der ortsüblichen Vergleichsmiete. Allerdings kritisieren Mietervereine, dass es zu wenige Ausnahmen von der Bremse gebe und Verstöße kaum sanktioniert würden.\n\nKontrovers diskutiert wird auch das Instrument der Milieuschutzsatzung, das Umwandlungen von Miet- in Eigentumswohnungen in bestimmten Gebieten unter Genehmigungsvorbehalt stellt. Während Städte darin ein wichtiges Steuerungsinstrument sehen, argumentieren Eigentümervertreter, die Maßnahme verhindere notwendige Investitionen in den Wohnungsbestand.\n\nEin viel diskutierter Ansatz ist die Gemeinwohlorientierung im Wohnungsbau. Statt renditeorientierter Immobiliengesellschaften könnten Genossenschaften und städtische Wohnungsbaugesellschaften eine größere Rolle spielen — ein Modell, das in Wien seit Jahrzehnten erfolgreich praktiziert wird.",
     questions: [
-      {q:"Um wie viel Prozent sind die Mieten in Ballungszentren gestiegen?", o:["20%","30%","40%","50%"], a:2},
-      {q:"Wann wurde die Mietpreisbremse eingeführt?", o:["2013","2014","2015","2016"], a:2},
-      {q:"Was bemängeln Mietervereine an der Mietpreisbremse?", o:["Sie ist zu streng","Es gibt zu viele Ausnahmen und wenige Sanktionen","Sie gilt nur in München","Sie wurde noch nicht eingeführt"], a:1},
-      {q:"Wofür steht 'Milieuschutzsatzung'?", o:["Förderung von Luxussanierungen","Schutz vor Umwandlung von Miet- in Eigentumswohnungen","Abschaffung des Mietrechts","Steuersenkung für Immobilienkäufer"], a:1},
-      {q:"Welches internationale Modell wird positiv erwähnt?", o:["London","Paris","Wien","New York"], a:2}
+      {q:"【Teil 1: Überschriften】Absatz 1: Welche Überschrift passt am besten?", o:["A. Die Rolle Wiens als Vorbild","B. Mietpreisbremse — ein Erfolgsmodell?","C. Wohnungsmarkt: Steigende Mieten durch Nachfragedruck","D. Eigentümer kritisieren Milieuschutz"], a:2, type:"heading"},
+      {q:"【Teil 1: Überschriften】Absatz 2: Welche Überschrift passt am besten?", o:["A. Staatliche Maßnahmen und ihre Grenzen","B. Warum Genossenschaften scheitern","C. Der Niedergang des Wohngeldes","D. Berlin als Sonderfall"], a:0, type:"heading"},
+      {q:"【Teil 1: Überschriften】Absatz 3: Welche Überschrift passt am besten?", o:["A. Luxussanierung als Lösung","B. Milieuschutz: Städte vs. Eigentümer","C. Neue Gesetze zur Mietbremse","D. Investoren kritisieren Städte"], a:1, type:"heading"},
+      {q:"【Teil 2: Richtig/Falsch】'Die Mieten stiegen in Ballungsräumen innerhalb von zehn Jahren um 40%.'", o:["A. Richtig","B. Falsch","C. Steht nicht im Text"], a:0, type:"tf"},
+      {q:"【Teil 2: Richtig/Falsch】'Die Mietpreisbremse wurde 2016 eingeführt.'", o:["A. Richtig","B. Falsch","C. Steht nicht im Text"], a:1, type:"tf"},
+      {q:"【Teil 2: Richtig/Falsch】'Mietervereine finden die Mietpreisbremse zu streng.'", o:["A. Richtig","B. Falsch","C. Steht nicht im Text"], a:1, type:"tf"},
+      {q:"【Teil 2: Richtig/Falsch】'Das Wiener Modell setzt auf private Investoren.'", o:["A. Richtig","B. Falsch","C. Steht nicht im Text"], a:1, type:"tf"},
+      {q:"【Teil 3: Verständnis】Welche Maßnahme wird im Text NICHT erwähnt?", o:["A. Mietpreisbremse","B. Erhöhung des Wohngeldes","C. Abschaffung der Grunderwerbsteuer","D. Förderung des sozialen Wohnungsbaus"], a:2, type:"comp"},
+      {q:"【Teil 3: Verständnis】Was versteht man unter 'Gemeinwohlorientierung'?", o:["A. Renditeorientierung von Immobilienfirmen","B. Genossenschaften und städtische Gesellschaften als Alternative","C. Privatisierung von Sozialwohnungen","D. Abschaffung aller Mietgesetze"], a:1, type:"comp"},
+      {q:"【Teil 3: Verständnis】Welche Stadt wird im Text als positives Beispiel genannt?", o:["A. Berlin","B. München","C. Wien","D. Frankfurt"], a:2, type:"comp"}
     ]
   },
   grammar: {
-    title: "📝 Grammatik (40 Pkt, 35 Min)",
+    title: "📝 Grammatik — 40 Pkt / 35 Min (6 Themenbereiche)",
     questions: [
-      {q:"___ der hohen Mieten ziehen immer noch Menschen in die Großstädte.", o:["Trotz","Wegen","Aufgrund","Während"], a:0, type:"präp"},
-      {q:"Die Mietpreisbremse ___ 2015 ___ (einführen → Passiv Präteritum).", o:["hat/eingeführt","wurde/eingeführt","ist/eingeführt","wird/eingeführen"], a:1, type:"passiv"},
-      {q:"Wenn die Mieten weiter ___ (steigen), ___ (werden) Wohnen unbezahlbar.", o:["steigen/wird","steigen würden/würde","stiegen/wurde","gestiegen/ist"], a:1, type:"KII"},
-      {q:"Es ___ (sein) wünschenswert, mehr Sozialwohnungen zu bauen.", o:["ist","sei","wäre","war"], a:2, type:"KII"},
-      {q:"Die Politik ___ (behaupten), Maßnahmen ___ (ergreifen → PII) worden.", o:["behauptet/ergriffen","behaupte/ergriffen","behauptet/gegriffen","behaupten/ergriff"], a:0, type:"KI"},
-      {q:"___ Genossenschaften stärker gefördert ___, ___ der Wohnungsmarkt entspannter.", o:["Wenn/wären/wäre","Würden/werden/ist","Hätten/werden/würde","Wenn/sind/ist"], a:1, type:"KII"},
-      {q:"Die Umwandlung von Miet- in Eigentumswohnungen ist in Milieuschutzgebieten ___ (genehmigen → Partizipialattribut: eine ___ Umwandlung).", o:["genehmigende","zu genehmigende","genehmigte","genehmigen"], a:1, type:"partizip"},
-      {q:"Man ___ mehr in den sozialen Wohnungsbau investieren ___ (müssen → KII).", o:["muss/haben","musste/--","müsste/--","müssen/--"], a:2, type:"modal"}
+      {q:"【Lückentext】___ der hohen Nachfrage bleibt Wohnraum knapp.", o:["A. Trotz","B. Wegen","C. Aufgrund","D. Angesichts"], a:2, type:"präp"},
+      {q:"【Lückentext】Die Mietpreisbremse gilt nur dort, ___ der Markt angespannt ist.", o:["A. weil","B. wo","C. dass","D. ob"], a:1, type:"konnektor"},
+      {q:"【Lückentext】___ ist die Frage, ___ die Maßnahmen tatsächlich wirken.", o:["A. Offen/ob","B. Es/dass","C. Man/wenn","D. Das/wie"], a:0, type:"lücke"},
+      {q:"【Nominalisierung】'Weil die Mieten stiegen' → ___", o:["A. wegen der steigenden Mieten","B. trotz der gestiegenen Mieten","C. aufgrund der steigenden Mieten","D. A und C sind richtig"], a:3, type:"nominal"},
+      {q:"【Nominalisierung】'Nachdem das Gesetz verabschiedet wurde' → ___", o:["A. vor der Verabschiedung des Gesetzes","B. nach der Verabschiedung des Gesetzes","C. während der Gesetzesverabschiedung","D. trotz des verabschiedeten Gesetzes"], a:1, type:"nominal"},
+      {q:"【Nominalisierung】'Dass die Regierung reagierte' → ___", o:["A. die Regierungsreaktion","B. die Reaktion der Regierung","C. das Reagieren der Regierung","D. A und B sind richtig"], a:1, type:"nominal"},
+      {q:"【Passiv】Die Mietpreisbremse ___ 2015 ___ (einführen).", o:["A. hat/eingeführt","B. wurde/eingeführt","C. ist/eingeführt worden","D. wird/eingeführt werden"], a:1, type:"passiv"},
+      {q:"【Passiv】Mehr Sozialwohnungen ___ dringend ___ (bauen → mit Modalverb).", o:["A. müssen/gebaut werden","B. müssen/bauen","C. sind/zu bauen","D. A und C sind richtig"], a:3, type:"passiv_ersatz"},
+      {q:"【Passiv】Das Problem ___ bis Ende des Jahres ___ (lösen → Passiv Perfekt).", o:["A. hat/gelöst","B. ist/gelöst worden","C. wurde/gelöst","D. wird/gelöst haben"], a:1, type:"passiv"},
+      {q:"【Partizipialattribute】'die Mieten, die steigen' → ___", o:["A. die gestiegenen Mieten","B. die steigenden Mieten","C. die zu steigenden Mieten","D. die gestiegen werdenden Mieten"], a:1, type:"partizip"},
+      {q:"【Partizipialattribute】'ein Gesetz, das verabschiedet werden muss' → ___", o:["A. ein verabschiedetes Gesetz","B. ein verabschiedendes Gesetz","C. ein zu verabschiedendes Gesetz","D. ein verabschiedet müssendes Gesetz"], a:2, type:"partizip"},
+      {q:"【Konjunktiv II】Wenn die Mieten nicht so stark ___ (steigen), ___ (sein) die Lage entspannter.", o:["A. steigen würden/wäre","B. gestiegen wären/wäre","C. steigen/ist","D. gestiegen sind/war"], a:1, type:"KII"},
+      {q:"【Konjunktiv II】Ohne die Mietpreisbremse ___ die Situation noch schlimmer ___ (sein).", o:["A. wäre/gewesen","B. ist/--","C. wäre/--","D. würde/sein"], a:2, type:"KII"},
+      {q:"【Konjunktiv I】Der Minister betonte, die Maßnahmen ___ (greifen) bereits.", o:["A. griffen","B. greifen","C. griff","D. gegriffen hätten"], a:0, type:"KI"},
+      {q:"【Konjunktiv I】Laut dem Bericht ___ (sein) die Quote im Mai auf 5,7% gestiegen.", o:["A. ist","B. wäre","C. sei","D. war"], a:2, type:"KI"},
+      {q:"【Modalverben】Man ___ mehr investieren, ___ die Krise zu bewältigen.", o:["A. muss/für","B. müsste/um","C. müsste/für","D. muss/damit"], a:1, type:"modal"}
     ]
   },
   writing: {
-    title: "✍️ Textproduktion (40 Pkt, 45-60 Min, 200-300 Wörter)",
-    prompt: "Sie wohnen in einer Großstadt und sind mit der Wohnsituation unzufrieden (hohe Miete, laute Nachbarn, schlechte Anbindung). Schreiben Sie eine formelle Beschwerde an Ihre Hausverwaltung. Gehen Sie auf folgende Punkte ein:\n\n1. Seit wann Sie dort wohnen\n2. Konkrete Beschwerdepunkte\n3. Was Sie bereits unternommen haben\n4. Welche Lösung Sie vorschlagen\n5. Frist für die Antwort"
+    title: "✍️ Textproduktion — 40 Pkt / 50 Min / 200-300 Wörter",
+    prompt: "Sie wohnen in einer Großstadt und sind mit der Wohnsituation unzufrieden (hohe Miete, laute Nachbarn, schlechte Anbindung).\n\nSchreiben Sie eine formelle Beschwerde an Ihre Hausverwaltung.\n\nBehandeln Sie folgende Punkte:\n1. Seit wann Sie dort wohnen und warum Sie die Wohnung ursprünglich gewählt haben\n2. Konkrete Beschwerdepunkte mit Beispielen\n3. Was Sie bereits unternommen haben\n4. Welche Lösung Sie vorschlagen\n5. Setzen Sie eine angemessene Frist\n\nAchten Sie auf:\n- Formelle Anrede und Grußformel (Sehr geehrte Damen und Herren / Mit freundlichen Grüßen)\n- Verwendung von Konjunktiv II (wäre, könnte, sollte, hätte)\n- Mindestens 200 Wörter"
   }
 };
 
@@ -2053,13 +2247,16 @@ P['unicert_skill_writing'] = function(){
   return h;
 };
 
-// 🔥 B2 12-Day Sprint Plan (to May 30)
+// 🔥 B2 12-Day Sprint Plan (to May 30) — ADAPTIVE
 P['unicert_b2_sprint'] = function(){
   var today = new Date();
-  var examDate = new Date(2026,4,30); // May 30, 2026
+  var examDate = new Date(2026,4,30);
   var daysLeft = Math.ceil((examDate - today) / 86400000);
   if (daysLeft < 0) daysLeft = 0;
   var sprintDay = Math.max(1, 13 - daysLeft);
+  var plan = loadSprintPlan();
+  var mock1 = plan.mock1;
+  var mock2 = plan.mock2;
 
   var h = '<h1>🔥 UNIcert B2 12天冲刺计划</h1>';
   h += '<div style="background:#2e1a1a;border:2px solid #e94560;border-radius:10px;padding:16px;margin:12px 0;text-align:center">';
@@ -2068,113 +2265,56 @@ P['unicert_b2_sprint'] = function(){
   h += '<span style="font-size:.75em;color:#7b8db5">今天是冲刺第 ' + sprintDay + '/12 天</span>';
   h += '</div>';
 
+  if (mock1) {
+    h += '<div style="display:grid;grid-template-columns:'+(mock2?'1fr 1fr':'1fr')+';gap:10px;margin-bottom:12px">';
+    h += '<div class="quiz" style="border-left:4px solid '+(mock1.overall>=60?'#22c55e':'#e94560')+'"><h4>📊 第一次模拟 ('+(mock1.date||'')+')</h4>';
+    h += '<div style="font-size:.85em;line-height:1.8">📖 阅读：<b style="color:'+(mock1.reading.pct>=60?'#22c55e':'#ef4444')+'">'+mock1.reading.score+'/'+mock1.reading.total+' ('+mock1.reading.pct+'%)</b><br>';
+    h += '📝 语法：<b style="color:'+(mock1.grammar.pct>=60?'#22c55e':'#ef4444')+'">'+mock1.grammar.score+'/'+mock1.grammar.total+' ('+mock1.grammar.pct+'%)</b><br>';
+    h += '🎯 总分：<b style="color:'+(mock1.overall>=60?'#22c55e':'#ef4444')+'">'+mock1.overall+'%</b> '+(mock1.overall>=60?'✅ 通过':'❌ 未通过')+'</div></div>';
+    if (mock2) {
+      h += '<div class="quiz" style="border-left:4px solid '+(mock2.overall>=60?'#22c55e':'#e94560')+'"><h4>📊 第二次模拟 ('+(mock2.date||'')+')</h4>';
+      h += '<div style="font-size:.85em;line-height:1.8">📖 阅读：<b style="color:'+(mock2.reading.pct>=60?'#22c55e':'#ef4444')+'">'+mock2.reading.score+'/'+mock2.reading.total+' ('+mock2.reading.pct+'%)</b><br>';
+      h += '📝 语法：<b style="color:'+(mock2.grammar.pct>=60?'#22c55e':'#ef4444')+'">'+mock2.grammar.score+'/'+mock2.grammar.total+' ('+mock2.grammar.pct+'%)</b><br>';
+      h += '🎯 总分：<b style="color:'+(mock2.overall>=60?'#22c55e':'#ef4444')+'">'+mock2.overall+'%</b> '+(mock2.overall>=60?'✅ 通过':'❌ 未通过');
+      var diff = mock2.overall - mock1.overall;
+      if (diff > 0) h += '（↗ +'+diff+'%）';
+      else if (diff < 0) h += '（↘ '+diff+'%）';
+      else h += '（→ 持平）';
+      h += '</div></div>';
+    }
+    h += '</div>';
+  }
+
   h += '<h2>📋 12天冲刺阶段划分</h2>';
   h += '<table><tr><th>阶段</th><th>天数</th><th>目标</th><th>强度</th></tr>';
   h += '<tr><td>🟢 第1-3天</td><td>Day 1-3</td><td>基础诊断 + 弱点定位</td><td>中</td></tr>';
-  h += '<tr><td>🟡 第4-7天</td><td>Day 4-7</td><td>专项突破（每天攻克1个弱项）</td><td>高</td></tr>';
-  h += '<tr><td>🟠 第8-10天</td><td>Day 8-10</td><td>全真模拟 + 错题清零</td><td>极高</td></tr>';
+  h += '<tr><td>🟡 第4-7天</td><td>Day 4-7</td><td>📌 根据模拟成绩自适应调整</td><td>高</td></tr>';
+  h += '<tr><td>🟠 第8-10天</td><td>Day 8-10</td><td>二次模拟 + 顽固错题清零</td><td>极高</td></tr>';
   h += '<tr><td>🔴 第11天</td><td>Day 11</td><td>总复习 + 写作押题</td><td>中</td></tr>';
   h += '<tr><td>⚪ 第12天</td><td>Day 12 (5.29)</td><td>考前放松 + 策略回顾</td><td>低</td></tr></table>';
 
-  // Daily breakdown
-  var days = [
-    {d:1,phase:'🟢',title:'诊断日：全真模拟+定位弱项',tasks:[
-      '完成B2全真模拟考试（unicert_b2_mock，计时135分钟）',
-      '记录阅读、语法、写作三个部分的得分',
-      '将所有错题整理到错题本',
-      '晚上：分析错题分布，确定弱项优先级',
-      '写作自评：对照评分标准给自己打分'
-    ]},
-    {d:2,phase:'🟢',title:'语法基础夯实',tasks:[
-      '弱项1：Nominalisierung专项（unicert_skill_grammar → Verbalisierung模块）',
-      '弱项2：Passiv ↔ Aktiv转换训练',
-      'B2语法样题重做（unicert_b2_grammar）',
-      'Grammatik aktiv B2-C1: Kapitel Passiv + Konjunktiv',
-      '错题本回顾：重点复习语法类错题'
-    ]},
-    {d:3,phase:'🟢',title:'阅读策略强化',tasks:[
-      '弱项3：阅读策略训练（unicert_skill_reading → 前4个单元）',
-      'B2阅读样题重做（unicert_b2_reading，计时答题）',
-      '重点训练：标题匹配 + 判断正误',
-      '学习阅读技巧：先读题→定位→比对',
-      '整理阅读高频词汇20个'
-    ]},
-    {d:4,phase:'🟡',title:'突破日：Nominalisierung死磕',tasks:[
-      'unicert_skill_grammar → Nominalisierung：全部10题重做',
-      '自编练习：将5个从句改写为名词短语',
-      '阅读1篇B2文章，圈出所有Nominalisierung结构',
-      '写作练习：用Nominalisierung改写一篇旧作文',
-      '目标：今天Nominalisierung正确率 > 80%'
-    ]},
-    {d:5,phase:'🟡',title:'突破日：Partizipialattribute攻克',tasks:[
-      'unicert_skill_grammar → Partizipialattribute：全部10题',
-      '阅读训练：找5个Partizipialattribute并拆解为Relativsatz',
-      'unicert_b2_grammar → Aufgabe 4 重做',
-      '写作中刻意使用Partizipialattribute（至少3处）',
-      '目标：Partizip识别和转换正确率 > 80%'
-    ]},
-    {d:6,phase:'🟡',title:'突破日：Konjunktiv II 全面掌握',tasks:[
-      'unicert_skill_grammar → Konjunktiv + Irreal：全部18题',
-      'KII Gegenwart vs Vergangenheit 对比练习',
-      '写作中确保每个正式信函至少使用3个KII表达',
-      '背熟sein/haben/werden/modalverben的KII形式',
-      '目标：KII正确率 > 85%'
-    ]},
-    {d:7,phase:'🟡',title:'突破日：阅读速度提升',tasks:[
-      '限时阅读：完成unicert_skill_reading剩余全部单元',
-      '每篇阅读控制在8分钟内完成',
-      '训练技巧：略读→寻读→精读的三步法',
-      '整理Reading高频词汇30个（从所有阅读训练中）',
-      '目标：阅读正确率 > 70%'
-    ]},
-    {d:8,phase:'🟠',title:'模拟日：B2全真模拟考试 #2',tasks:[
-      '上午：完整模拟（unicert_b2_mock，严格计时）',
-      '阅读(45min) → 语法(20min) → 写作(60min)',
-      '下午：逐题分析错因，分类记录',
-      '语法弱项：回到unicert_skill_grammar针对性强化',
-      '阅读弱项：回到unicert_skill_reading强化',
-      '目标：总分 > 60%（通过线）'
-    ]},
-    {d:9,phase:'🟠',title:'模拟日：错题清零 + 写作强化',tasks:[
-      '上午：完成error_review中所有UNIcert相关错题',
-      '写作实战：限时60分钟完成1篇Beschwerdebrief',
-      '写作实战：限时60分钟完成1篇Bewerbung',
-      '对照范文自评：检查Redemittel使用、KII、Nominalisierung',
-      '背诵unicert_b2_writing的全部Redemittel'
-    ]},
-    {d:10,phase:'🟠',title:'模拟日：B2全真模拟考试 #3（最终摸底）',tasks:[
-      '上午：最终模拟（按真实考试流程，不间断）',
-      '目标：阅读正确率>75%，语法>80%',
-      '下午：终极错题整理，制作"考前一张纸"',
-      '考前一张纸 = 最重要的20个语法点 + 10个Redemittel + 易错词',
-      '如果总分仍未过60%，标记弱项明天重点补'
-    ]},
-    {d:11,phase:'🔴',title:'总复习 + 押题写作',tasks:[
-      '上午：考前一张纸反复默写（闭卷）',
-      '核心语法快速过：KII表格、Passiv各时态、Nominalisierung规则',
-      '写作押题：准备3个热门话题模板（数字化/环境/教育）',
-      '下午：轻松复习——只看对的，不刷难题',
-      '晚上：准备考试物品，了解考点路线，早睡'
-    ]},
-    {d:12,phase:'⚪',title:'考试日准备 (5.29)',tasks:[
-      '仅复习：看"考前一张纸" + Redemittel',
-      '不做新题！不做难题！',
-      '散步/运动30分钟，保持心态',
-      '检查：身份证/准考证/笔/手表/水',
-      '晚上9点前入睡，保证8小时睡眠'
-    ]}
-  ];
+  h += '<h2>📅 每日详细计划 '+(mock1?'<span style="font-size:.7em;color:#22c55e">✅ 已根据模拟成绩个性化</span>':'<span style="font-size:.7em;color:#f39c12">⚠️ 完成Day 1诊断后将自动个性化</span>')+'</h2>';
 
-  h += '<h2>📅 每日详细计划</h2>';
-  days.forEach(function(d){
-    var marker = sprintDay === d.d ? ' <span style="background:#e94560;color:#fff;padding:2px 8px;border-radius:10px;font-size:.7em">← 今天</span>' : '';
-    var doneMarker = sprintDay > d.d ? ' ✅' : '';
-    h += '<div class="quiz" style="border-left:4px solid '+(sprintDay===d.d?'#e94560':sprintDay>d.d?'#22c55e':'#0f3460')+'">';
-    h += '<h4>'+d.phase+' Day '+d.d+'：'+d.title+marker+doneMarker+'</h4>';
-    h += '<ol>';
-    d.tasks.forEach(function(t){h+='<li>'+t+'</li>';});
+  for (var d = 1; d <= 12; d++) {
+    var dayInfo = getSprintDayTasks(d, mock1, mock2);
+    var isToday = sprintDay === d;
+    var isPast = sprintDay > d;
+    var borderColor = isToday ? '#e94560' : (isPast ? '#22c55e' : '#0f3460');
+    var marker = isToday ? ' <span style="background:#e94560;color:#fff;padding:2px 8px;border-radius:10px;font-size:.7em">← 今天</span>' : '';
+    var doneMarker = isPast ? ' ✅' : '';
+
+    h += '<div class="quiz" style="border-left:4px solid '+borderColor+';margin-bottom:8px">';
+    h += '<h4>'+dayInfo.phase+' Day '+d+'：'+dayInfo.title+marker+doneMarker+'</h4>';
+    h += '<ol style="margin-bottom:0">';
+    dayInfo.tasks.forEach(function(t){
+      if (t.page) {
+        h += '<li style="margin-bottom:4px">'+t.text+' <button class="btn btn-outline" style="font-size:.68em;padding:2px 8px;margin-left:4px" onclick="event.stopPropagation();goPage(\''+t.page+'\')">Los →</button></li>';
+      } else {
+        h += '<li style="margin-bottom:4px">'+t.text+'</li>';
+      }
+    });
     h += '</ol></div>';
-  });
+  }
 
   h += '<h2>🎯 每日必修习惯</h2>';
   h += '<div class="tip"><ul>';
@@ -2191,11 +2331,13 @@ P['unicert_b2_sprint'] = function(){
   h += '<b>最低通过线：</b>阅读≥60% | 语法≥60% | 写作≥60% | 听力≥60% | 口语≥60%<br>';
   h += '<b>冲刺目标：</b>阅读≥75% | 语法≥80% | 写作≥70% | 听力≥65% | 口语≥65%</div>';
 
-  h += '<div style="margin-top:16px;display:flex;gap:8px">';
-  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_mock\')">🧪 立即开始模拟考试</button>';
+  h += '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_mock\')">🧪 '+(mock1?'重新':'立即开始')+'模拟考试</button>';
   h += '<button class="btn btn-gold" onclick="goPage(\'unicert_skill_grammar\')">🎯 语法专项突破</button>';
   h += '<button class="btn btn-outline" onclick="goPage(\'unicert_skill_reading\')">📖 阅读专项突破</button>';
+  if (mock1) h += '<button class="btn" style="background:#7c2d12;color:#fdba74;font-size:.72em" onclick="if(confirm(\'确定要重置冲刺计划吗？这将清除所有模拟成绩。\')){localStorage.removeItem(\'de-sprint-b2\');renderContent();}">🔄 重置冲刺计划</button>';
   h += '</div>';
+
   return h;
 };
 
@@ -4729,7 +4871,7 @@ function renderUnicertMock(level) {
 
   // Setup word counter
   var ta = document.getElementById(prefix+'_writing');
-  if (ta) { ta.oninput = function(){ document.getElementById(prefix+'_wc').textContent = ta.value.split(/\\s+/).filter(function(x){return x.length>0;}).length + ' Wörter'; }; }
+  if (ta) { ta.oninput = function(){ document.getElementById(prefix+'_wc').textContent = ta.value.split(/\s+/).filter(function(x){return x.length>0;}).length + ' Wörter'; }; }
 
   // Setup test state
   window.testState[prefix+'_r'] = {questions:rqs, answers:new Array(rqs.length).fill(null)};
@@ -4767,7 +4909,7 @@ function unicertMockSubmit(prefix, totalQs, writingId) {
   var pctG = Math.round(scoreG/totalG*100);
 
   var ta = document.getElementById(writingId);
-  var wc = ta ? ta.value.split(/\\s+/).filter(function(x){return x.length>0;}).length : 0;
+  var wc = ta ? ta.value.split(/\s+/).filter(function(x){return x.length>0;}).length : 0;
   var writingFeedback = '';
   if (wc === 0) {
     writingFeedback = '⚠️ 写作未完成，请补写后重新评分。';
@@ -4806,6 +4948,7 @@ function unicertMockSubmit(prefix, totalQs, writingId) {
       }
     });
   });
+  recordSprintMock(level, prefix);
 }
 
 // ===== B2 Listening Renderer =====
