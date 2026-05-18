@@ -143,7 +143,10 @@ textarea{resize:vertical;min-height:80px}
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 <div class="sidebar" id="sidebar"><h2>🇩🇪 B2→C1 Trainer</h2><div id="nav-list"></div>
 <div class="auth-section" id="auth-section">
-  <div id="auth-logged-out">
+  <div id="auth-local-mode">
+    <div style="font-size:.65em;color:#7b8db5;text-align:center;margin-bottom:6px;line-height:1.5">所有学习数据保存在浏览器本地<br>💡 <b>手机也能用？</b><br>浏览器访问：<br><span style="color:#22c55e">fabianrobert467-dot.github.io/<wbr>deutsch-lernen/</span></div>
+  </div>
+  <div id="auth-logged-out" style="display:none">
     <button class="btn btn-red" style="width:100%;font-size:.78em" onclick="showAuthModal()">☁️ 登录 / 注册</button>
     <div style="font-size:.65em;color:#7b8db5;text-align:center;margin-top:4px">登录后跨设备同步</div>
   </div>
@@ -183,12 +186,27 @@ var auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
 var currentUser = null;
 var _syncIgnore = false;  // prevent onSnapshot loop when we're the pusher
+var _authSupported = location.protocol === 'https:' || location.protocol === 'http:' || location.protocol === 'chrome-extension:';
 
-// Auth UI
-window.showAuthModal = function() { document.getElementById('auth-modal').classList.add('open'); };
+// Auth UI — show login only when protocol supports Firebase Auth
+(function initAuthUI(){
+  if (_authSupported) {
+    document.getElementById('auth-local-mode').style.display = 'none';
+    document.getElementById('auth-logged-out').style.display = 'block';
+  } else {
+    document.getElementById('auth-local-mode').style.display = 'block';
+    document.getElementById('auth-logged-out').style.display = 'none';
+  }
+})();
+
+window.showAuthModal = function() {
+  if (!_authSupported) { alert('请在浏览器中打开在线版本：\nfabianrobert467-dot.github.io/deutsch-lernen/'); return; }
+  document.getElementById('auth-modal').classList.add('open');
+};
 window.hideAuthModal = function() { document.getElementById('auth-modal').classList.remove('open'); var e=document.getElementById('auth-error'); if(e)e.style.display='none'; };
 
 window.register = function() {
+  if (!_authSupported) return;
   var em = document.getElementById('auth-email-input').value.trim();
   var pw = document.getElementById('auth-password-input').value;
   var er = document.getElementById('auth-error');
@@ -197,6 +215,7 @@ window.register = function() {
 };
 
 window.login = function() {
+  if (!_authSupported) return;
   var em = document.getElementById('auth-email-input').value.trim();
   var pw = document.getElementById('auth-password-input').value;
   var er = document.getElementById('auth-error');
@@ -205,10 +224,21 @@ window.login = function() {
 };
 
 window.loginWithGoogle = function() {
+  if (!_authSupported) return;
   var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).then(function(){ hideAuthModal(); }).catch(function(e){
-    document.getElementById('auth-error').textContent = '❌ ' + e.message;
-    document.getElementById('auth-error').style.display = 'block';
+  var isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+  var method = isMobile ? auth.signInWithRedirect(provider) : auth.signInWithPopup(provider);
+  method.then(function(){ hideAuthModal(); }).catch(function(e){
+    // If popup fails on desktop, try redirect as fallback
+    if (!isMobile && e.code === 'auth/popup-blocked') {
+      auth.signInWithRedirect(provider).catch(function(e2){
+        document.getElementById('auth-error').textContent = '❌ ' + e2.message;
+        document.getElementById('auth-error').style.display = 'block';
+      });
+    } else {
+      document.getElementById('auth-error').textContent = '❌ ' + e.message;
+      document.getElementById('auth-error').style.display = 'block';
+    }
   });
 };
 
@@ -216,9 +246,11 @@ window.logout = function() { auth.signOut(); };
 
 function setSyncUI(user) {
   currentUser = user;
-  document.getElementById('auth-logged-out').style.display = user ? 'none' : 'block';
-  document.getElementById('auth-logged-in').style.display = user ? 'block' : 'none';
-  if (user) document.getElementById('auth-email-display').textContent = user.email;
+  if (_authSupported) {
+    document.getElementById('auth-logged-out').style.display = user ? 'none' : 'block';
+    document.getElementById('auth-logged-in').style.display = user ? 'block' : 'none';
+    if (user) document.getElementById('auth-email-display').textContent = user.email;
+  }
 }
 
 function setSyncDot(s) {
@@ -428,6 +460,23 @@ const nav = [
   {id:'daily_reading',title:'📰 今日阅读',mod:'📖 Tägliches Lesen'},
   {id:'tomorrow_plan',title:'🔮 明日计划',mod:''},
   {id:'exam_tips',title:'🏆 考试通关策略',mod:''},
+  {id:'unicert_hub',title:'🎓 UNIcert-CN 备考中心',mod:'🎓 UNIcert-CN'},
+  {id:'unicert_b2_sprint',title:'🔥 B2 12天冲刺计划 (5.30)',mod:''},
+  {id:'unicert_b2_format',title:'📋 B2 考试格式详解',mod:''},
+  {id:'unicert_c1_format',title:'📋 C1 考试格式详解',mod:''},
+  {id:'unicert_b2_reading',title:'📖 B2 样题：阅读 (LV)',mod:''},
+  {id:'unicert_b2_grammar',title:'📝 B2 样题：语法',mod:''},
+  {id:'unicert_b2_writing',title:'✍️ B2 样题：写作范文',mod:''},
+  {id:'unicert_b2_listening',title:'🎧 B2 听力训练 (HV)',mod:''},
+  {id:'unicert_b2_speaking',title:'💬 B2 口语训练 (Sprechen)',mod:''},
+  {id:'unicert_b2_mock',title:'🧪 B2 全真模拟考试',mod:''},
+  {id:'unicert_c1_reading',title:'📖 C1 样题：阅读 (LV)',mod:''},
+  {id:'unicert_c1_grammar',title:'📝 C1 样题：语法',mod:''},
+  {id:'unicert_c1_writing',title:'✍️ C1 样题：写作范文',mod:''},
+  {id:'unicert_c1_mock',title:'🧪 C1 全真模拟考试',mod:''},
+  {id:'unicert_skill_reading',title:'🎯 专项突破：阅读',mod:'🎯 专项突破'},
+  {id:'unicert_skill_grammar',title:'🎯 专项突破：语法',mod:''},
+  {id:'unicert_skill_writing',title:'🎯 专项突破：写作模板',mod:''},
   {id:'error_review',title:'🔴 错题复习',mod:'📋 Fehlerbank'},
   {id:'srs_review',title:'🧠 间隔复习（长期记忆）',mod:''},
 ];
@@ -685,6 +734,16 @@ const vocab_b2_alltag = [
   {de:'die Gelegenheit',zh:'机会',hint:'Nomen, f.',ex:'Nutze die Gelegenheit!'},
   {de:'der Einfluss',zh:'影响',hint:'Nomen, m.',ex:'Eltern haben großen Einfluss auf ihre Kinder.'},
   {de:'die Lösung',zh:'解决方案',hint:'Nomen, f.',ex:'Dafür müssen wir eine Lösung finden.'},
+  {de:'der Haushalt',zh:'家庭；预算',hint:'Nomen, m.',ex:'Der Staatshaushalt muss saniert werden.'},
+  {de:'die Einstellung',zh:'态度；观念',hint:'Nomen, f.',ex:'Seine Einstellung zur Arbeit ist vorbildlich.'},
+  {de:'die Bereitschaft',zh:'意愿；准备',hint:'Nomen, f.',ex:'Ohne Bereitschaft zur Veränderung geht es nicht.'},
+  {de:'der Stellenwert',zh:'重要性；地位',hint:'Nomen, m.',ex:'Bildung hat einen hohen Stellenwert in Deutschland.'},
+  {de:'der Zeitdruck',zh:'时间压力',hint:'Nomen, m.',ex:'Viele Arbeitnehmer leiden unter Zeitdruck.'},
+  {de:'die Herausforderung',zh:'挑战',hint:'Nomen, f.',ex:'Die Digitalisierung ist eine große Herausforderung.'},
+  {de:'der Lebensunterhalt',zh:'生计',hint:'Nomen, m.',ex:'Er verdient seinen Lebensunterhalt als Kellner.'},
+  {de:'die Selbstverwirklichung',zh:'自我实现',hint:'Nomen, f.',ex:'Arbeit dient nicht nur der Selbstverwirklichung.'},
+  {de:'betreuen',zh:'照顾；照管',hint:'Verb',ex:'Die Großeltern betreuen die Kinder nachmittags.'},
+  {de:'die Wertvorstellung',zh:'价值观',hint:'Nomen, Pl.',ex:'Wertvorstellungen unterscheiden sich kulturell.'},
 ];
 
 const vocab_b2_gesund = [
@@ -713,6 +772,16 @@ const vocab_b2_gesund = [
   {de:'die Diagnose',zh:'诊断',hint:'Nomen, f.',ex:'Die Diagnose war ein Schock für ihn.'},
   {de:'die Therapie',zh:'治疗方案',hint:'Nomen, f.',ex:'Die Therapie zeigt gute Ergebnisse.'},
   {de:'das Medikament',zh:'药物',hint:'Nomen, n.',ex:'Nehmen Sie das Medikament dreimal täglich.'},
+  {de:'die Genesung',zh:'康复',hint:'Nomen, f.',ex:'Nach der Operation wünsche ich Ihnen gute Genesung.'},
+  {de:'die Krankenkasse',zh:'医疗保险公司',hint:'Nomen, f.',ex:'Die Krankenkasse übernimmt die Kosten.'},
+  {de:'das Gesundheitssystem',zh:'医疗体系',hint:'Nomen, n.',ex:'Das deutsche Gesundheitssystem gilt als vorbildlich.'},
+  {de:'die Rückenschmerzen',zh:'背痛',hint:'Nomen, Pl.',ex:'Viele Büroangestellte leiden unter Rückenschmerzen.'},
+  {de:'die Sucht',zh:'成瘾',hint:'Nomen, f.',ex:'Internetsucht wird zunehmend als Problem erkannt.'},
+  {de:'psychisch',zh:'心理的',hint:'Adjektiv',ex:'Psychische Erkrankungen werden oft unterschätzt.'},
+  {de:'die Burnout-Prävention',zh:'职业倦怠预防',hint:'Nomen, f.',ex:'Immer mehr Firmen bieten Burnout-Prävention an.'},
+  {de:'chronisch',zh:'慢性的',hint:'Adjektiv',ex:'Chronische Krankheiten erfordern eine langfristige Behandlung.'},
+  {de:'die Pflegeversicherung',zh:'护理保险',hint:'Nomen, f.',ex:'Die Pflegeversicherung ist die fünfte Säule der Sozialversicherung.'},
+  {de:'ganzheitlich',zh:'整体的；全方位的',hint:'Adjektiv',ex:'Ein ganzheitlicher Ansatz bezieht Körper und Geist ein.'},
 ];
 
 const vocab_b2_reise = [
@@ -741,6 +810,16 @@ const vocab_b2_reise = [
   {de:'verreisen',zh:'去旅行',hint:'Verb',ex:'Wir verreisen jedes Jahr im Sommer.'},
   {de:'der Abflug',zh:'起飞',hint:'Nomen, m.',ex:'Der Abflug verschiebt sich um eine Stunde.'},
   {de:'landen',zh:'降落',hint:'Verb',ex:'Das Flugzeug landet pünktlich.'},
+  {de:'die Rundreise',zh:'环游',hint:'Nomen, f.',ex:'Wir buchten eine zweiwöchige Rundreise durch Italien.'},
+  {de:'der Kurztrip',zh:'短途旅行',hint:'Nomen, m.',ex:'Am Wochenende machen wir einen Kurztrip nach Prag.'},
+  {de:'das Reiseziel',zh:'旅行目的地',hint:'Nomen, n.',ex:'Unser Reiseziel war dieses Jahr Barcelona.'},
+  {de:'die Reisekrankheit',zh:'晕车/晕机',hint:'Nomen, f.',ex:'Gegen Reisekrankheit helfen spezielle Tabletten.'},
+  {de:'der Massentourismus',zh:'大众旅游',hint:'Nomen, m.',ex:'Massentourismus belastet viele historische Städte.'},
+  {de:'die Gastfreundschaft',zh:'好客',hint:'Nomen, f.',ex:'Die Gastfreundschaft der Einheimischen war überwältigend.'},
+  {de:'barrierefrei',zh:'无障碍的',hint:'Adjektiv',ex:'Das Hotel ist komplett barrierefrei.'},
+  {de:'die Bahncard',zh:'铁路优惠卡',hint:'Nomen, f.',ex:'Mit der Bahncard 50 sparst du die Hälfte.'},
+  {de:'die Fahrgemeinschaft',zh:'拼车',hint:'Nomen, f.',ex:'Viele Pendler bilden Fahrgemeinschaften.'},
+  {de:'der Transitbereich',zh:'过境区',hint:'Nomen, m.',ex:'Im Transitbereich benötigt man kein Visum.'},
 ];
 
 const vocab_wissenschaft = [
@@ -769,6 +848,16 @@ const vocab_wissenschaft = [
   {de:'der Diskurs',zh:'话语；讨论',hint:'Nomen, m.',ex:'Der wissenschaftliche Diskurs ist kontrovers.'},
   {de:'die Publikation',zh:'发表（论文）',hint:'Nomen, f.',ex:'Die Publikation erschien in einer Fachzeitschrift.'},
   {de:'das Paradigma',zh:'范式',hint:'Nomen, n.',ex:'Ein Paradigmenwechsel findet selten statt.'},
+  {de:'die Metaanalyse',zh:'元分析',hint:'Nomen, f.',ex:'Die Metaanalyse fasste 50 Einzelstudien zusammen.'},
+  {de:'replizieren',zh:'复制；重现',hint:'Verb',ex:'Die Ergebnisse ließen sich nicht replizieren.'},
+  {de:'das Peer-Review-Verfahren',zh:'同行评审',hint:'Nomen, n.',ex:'Das Peer-Review-Verfahren sichert wissenschaftliche Qualität.'},
+  {de:'der Forschungsstand',zh:'研究现状',hint:'Nomen, m.',ex:'Der aktuelle Forschungsstand ist widersprüchlich.'},
+  {de:'die Grundlagenforschung',zh:'基础研究',hint:'Nomen, f.',ex:'Ohne Grundlagenforschung gibt es keine Innovation.'},
+  {de:'interdisziplinär',zh:'跨学科的',hint:'Adjektiv',ex:'Interdisziplinäre Ansätze gewinnen an Bedeutung.'},
+  {de:'die Stichprobe',zh:'样本',hint:'Nomen, f.',ex:'Die Stichprobe umfasste 2000 Teilnehmer.'},
+  {de:'der Fachbegriff',zh:'专业术语',hint:'Nomen, m.',ex:'Dieser Fachbegriff muss erklärt werden.'},
+  {de:'die Randomisierung',zh:'随机化',hint:'Nomen, f.',ex:'Die Randomisierung verhindert systematische Fehler.'},
+  {de:'das Forschungsdesign',zh:'研究设计',hint:'Nomen, n.',ex:'Das Forschungsdesign wurde von der Ethikkommission geprüft.'},
 ];
 
 const vocab_politik = [
@@ -797,6 +886,15 @@ const vocab_politik = [
   {de:'der Abgeordnete',zh:'议员',hint:'Nomen, m.',ex:'Die Abgeordneten stimmten über das Gesetz ab.'},
   {de:'das Plädoyer',zh:'辩护；呼吁',hint:'Nomen, n.',ex:'Ein Plädoyer für mehr Bildungsinvestitionen.'},
   {de:'die Liberalisierung',zh:'自由化',hint:'Nomen, f.',ex:'Die Liberalisierung führte zu mehr Wettbewerb.'},
+  {de:'der Staatshaushalt',zh:'国家预算',hint:'Nomen, m.',ex:'Der Staatshaushalt weist ein Defizit auf.'},
+  {de:'die Gewaltenteilung',zh:'三权分立',hint:'Nomen, f.',ex:'Die Gewaltenteilung ist Grundprinzip der Demokratie.'},
+  {de:'die Volksvertretung',zh:'人民代表',hint:'Nomen, f.',ex:'Der Bundestag ist die Volksvertretung Deutschlands.'},
+  {de:'die Gesetzesinitiative',zh:'法律提案',hint:'Nomen, f.',ex:'Die Gesetzesinitiative kam von der Opposition.'},
+  {de:'der Misstrauensantrag',zh:'不信任动议',hint:'Nomen, m.',ex:'Der Misstrauensantrag erhielt keine Mehrheit.'},
+  {de:'die Demografie',zh:'人口结构',hint:'Nomen, f.',ex:'Die Demografie stellt den Sozialstaat vor Herausforderungen.'},
+  {de:'das Asylverfahren',zh:'庇护程序',hint:'Nomen, n.',ex:'Das Asylverfahren wurde beschleunigt.'},
+  {de:'die Wahlbeteiligung',zh:'投票率',hint:'Nomen, f.',ex:'Die Wahlbeteiligung lag bei 76,2%.'},
+  {de:'das Parteiensystem',zh:'政党制度',hint:'Nomen, n.',ex:'Das deutsche Parteiensystem hat sich ausdifferenziert.'},
 ];
 
 const vocab_umwelt = [
@@ -825,6 +923,16 @@ const vocab_umwelt = [
   {de:'die Feinstaubbelastung',zh:'微粒污染',hint:'Nomen, f.',ex:'In Städten ist die Feinstaubbelastung zu hoch.'},
   {de:'das Ozonloch',zh:'臭氧层空洞',hint:'Nomen, n.',ex:'Das Ozonloch schrumpft langsam.'},
   {de:'rezipieren',zh:'回收利用',hint:'Verb',ex:'Kunststoffe lassen sich nur begrenzt rezipieren.'},
+  {de:'das Treibhausgas',zh:'温室气体',hint:'Nomen, n.',ex:'Methan ist ein besonders starkes Treibhausgas.'},
+  {de:'die Umweltverträglichkeit',zh:'环境兼容性',hint:'Nomen, f.',ex:'Die Umweltverträglichkeit des Projekts wird geprüft.'},
+  {de:'das Kyoto-Protokoll',zh:'京都议定书',hint:'Nomen, n.',ex:'Das Kyoto-Protokoll war ein Meilenstein der Klimapolitik.'},
+  {de:'die Energieeffizienz',zh:'能源效率',hint:'Nomen, f.',ex:'Die Energieeffizienz von Gebäuden muss verbessert werden.'},
+  {de:'der Emissionshandel',zh:'碳排放交易',hint:'Nomen, m.',ex:'Der Emissionshandel ist Kernstück der EU-Klimapolitik.'},
+  {de:'die Aufforstung',zh:'植树造林',hint:'Nomen, f.',ex:'Aufforstung kann CO2 aus der Atmosphäre binden.'},
+  {de:'der Trinkwassermangel',zh:'饮用水缺乏',hint:'Nomen, m.',ex:'Trinkwassermangel betrifft viele Regionen der Welt.'},
+  {de:'das Elektroauto',zh:'电动汽车',hint:'Nomen, n.',ex:'Elektroautos sollen den Verkehr umweltfreundlicher machen.'},
+  {de:'die Mülltrennung',zh:'垃圾分类',hint:'Nomen, f.',ex:'Mülltrennung ist in Deutschland Pflicht.'},
+  {de:'das Pariser Abkommen',zh:'巴黎协定',hint:'Nomen, n.',ex:'Das Pariser Abkommen begrenzt die Erderwärmung auf 1,5 Grad.'},
 ];
 
 const vocab_medien = [
@@ -853,6 +961,16 @@ const vocab_medien = [
   {de:'die Echokammer',zh:'回音室',hint:'Nomen, f.',ex:'Soziale Medien können Echokammern verstärken.'},
   {de:'das Leitmedium',zh:'主流媒体',hint:'Nomen, n.',ex:'Die Tagesschau gilt als Leitmedium.'},
   {de:'die Reichweite',zh:'覆盖范围',hint:'Nomen, f.',ex:'Die Reichweite dieses Mediums ist enorm.'},
+  {de:'die Desinformation',zh:'虚假信息',hint:'Nomen, f.',ex:'Gezielte Desinformation bedroht die Demokratie.'},
+  {de:'der Whistleblower',zh:'告密者；举报人',hint:'Nomen, m.',ex:'Der Whistleblower deckte den Datenschutzskandal auf.'},
+  {de:'das Nutzerverhalten',zh:'用户行为',hint:'Nomen, n.',ex:'Algorithmen analysieren das Nutzerverhalten.'},
+  {de:'die Meinungsvielfalt',zh:'意见多样性',hint:'Nomen, f.',ex:'Meinungsvielfalt ist ein Grundpfeiler der Demokratie.'},
+  {de:'der Datenmissbrauch',zh:'数据滥用',hint:'Nomen, m.',ex:'Datenmissbrauch muss streng bestraft werden.'},
+  {de:'die Künstliche Intelligenz (KI)',zh:'人工智能',hint:'Nomen, f.',ex:'KI-generierte Texte sind kaum von echten zu unterscheiden.'},
+  {de:'die Personalisierung',zh:'个性化',hint:'Nomen, f.',ex:'Die Personalisierung von Inhalten schränkt den Horizont ein.'},
+  {de:'der Hasskommentar',zh:'仇恨评论',hint:'Nomen, m.',ex:'Soziale Netzwerke müssen mehr gegen Hasskommentare tun.'},
+  {de:'die Netzneutralität',zh:'网络中立',hint:'Nomen, f.',ex:'Die Netzneutralität ist in der EU gesetzlich geschützt.'},
+  {de:'das Metaversum',zh:'元宇宙',hint:'Nomen, n.',ex:'Das Metaversum könnte die nächste digitale Revolution auslösen.'},
 ];
 
 const vocab_arbeit = [
@@ -881,6 +999,16 @@ const vocab_arbeit = [
   {de:'das Outsourcing',zh:'外包',hint:'Nomen, n.',ex:'Outsourcing in Niedriglohnländer ist umstritten.'},
   {de:'die Insolvenz',zh:'破产',hint:'Nomen, f.',ex:'Das Unternehmen musste Insolvenz anmelden.'},
   {de:'der Absatzmarkt',zh:'销售市场',hint:'Nomen, m.',ex:'China ist ein wichtiger Absatzmarkt.'},
+  {de:'die Lohnnebenkosten',zh:'工资附加成本',hint:'Nomen, Pl.',ex:'Hohe Lohnnebenkosten erschweren Neueinstellungen.'},
+  {de:'die Gewinnmarge',zh:'利润率',hint:'Nomen, f.',ex:'Die Gewinnmarge sank aufgrund gestiegener Rohstoffpreise.'},
+  {de:'das Lieferkettengesetz',zh:'供应链法',hint:'Nomen, n.',ex:'Das Lieferkettengesetz verpflichtet zu Menschenrechtsstandards.'},
+  {de:'die Agenda 2010',zh:'2010议程（改革方案）',hint:'Nomen, f.',ex:'Die Agenda 2010 reformierte den deutschen Arbeitsmarkt.'},
+  {de:'das bedingungslose Grundeinkommen',zh:'无条件基本收入',hint:'Nomen, n.',ex:'Das bedingungslose Grundeinkommen wird kontrovers diskutiert.'},
+  {de:'der Protektionismus',zh:'贸易保护主义',hint:'Nomen, m.',ex:'Protektionismus könnte einen Handelskrieg auslösen.'},
+  {de:'die Strukturreform',zh:'结构性改革',hint:'Nomen, f.',ex:'Ohne Strukturreformen bleibt das Wachstum schwach.'},
+  {de:'der Niedriglohnsektor',zh:'低薪行业',hint:'Nomen, m.',ex:'Der Niedriglohnsektor ist in Deutschland gewachsen.'},
+  {de:'die Schuldenbremse',zh:'债务刹车机制',hint:'Nomen, f.',ex:'Die Schuldenbremse wurde im Grundgesetz verankert.'},
+  {de:'die Marktwirtschaft',zh:'市场经济',hint:'Nomen, f.',ex:'Die soziale Marktwirtschaft ist das deutsche Wirtschaftsmodell.'},
 ];
 
 const vocab_b2_beruf = [
@@ -909,6 +1037,16 @@ const vocab_b2_beruf = [
   {de:'der Urlaub,-e',zh:'假期/休假',hint:'Nomen, m.',ex:'Ich habe im August drei Wochen Urlaub.'},
   {de:'selbstständig',zh:'独立/自主',hint:'Adj.',ex:'Sie arbeitet sehr selbstständig.'},
   {de:'die Probezeit,-en',zh:'试用期',hint:'Nomen, f.',ex:'Die Probezeit beträgt sechs Monate.'},
+  {de:'die Arbeitslosigkeit',zh:'失业',hint:'Nomen, f.',ex:'Die Arbeitslosigkeit ist auf 5,7% gesunken.'},
+  {de:'die Teilzeitarbeit',zh:'兼职工作',hint:'Nomen, f.',ex:'Viele Mütter leisten nur noch Teilzeitarbeit.'},
+  {de:'die Zeitarbeit',zh:'临时工',hint:'Nomen, f.',ex:'Zeitarbeit bietet Flexibilität, aber wenig Sicherheit.'},
+  {de:'die Sozialabgaben',zh:'社保缴费',hint:'Nomen, Pl.',ex:'Sozialabgaben machen einen großen Teil der Lohnkosten aus.'},
+  {de:'ehrenamtlich',zh:'志愿的；名誉的',hint:'Adjektiv',ex:'Sie engagiert sich ehrenamtlich im Tierheim.'},
+  {de:'das Arbeitszeugnis',zh:'工作证明/推荐信',hint:'Nomen, n.',ex:'Ein gutes Arbeitszeugnis ist bei der Bewerbung Gold wert.'},
+  {de:'das Homeoffice',zh:'居家办公',hint:'Nomen, n.',ex:'Viele Unternehmen erlauben zwei Tage Homeoffice pro Woche.'},
+  {de:'die Work-Life-Balance',zh:'工作生活平衡',hint:'Nomen, f.',ex:'Eine gute Work-Life-Balance steigert die Zufriedenheit.'},
+  {de:'die Fluktuation',zh:'人员流动',hint:'Nomen, f.',ex:'Eine hohe Fluktuation weist oft auf schlechte Arbeitsbedingungen hin.'},
+  {de:'sich weiterbilden',zh:'进修',hint:'Verb',ex:'Er bildet sich neben dem Job ständig weiter.'},
 ];
 
 const vocab_b2_medien = [
@@ -937,6 +1075,16 @@ const vocab_b2_medien = [
   {de:'die App,-s',zh:'应用程序',hint:'Nomen, f.',ex:'Diese App hilft beim Deutschlernen.'},
   {de:'abonnieren',zh:'订阅',hint:'Verb',ex:'Ich habe den Newsletter abonniert.'},
   {de:'die Unterhaltung,-en',zh:'娱乐',hint:'Nomen, f.',ex:'Streamingdienste bieten Unterhaltung rund um die Uhr.'},
+  {de:'die Pressemitteilung',zh:'新闻稿',hint:'Nomen, f.',ex:'Das Unternehmen verschickte eine Pressemitteilung.'},
+  {de:'der Moderator,-en',zh:'主持人',hint:'Nomen, m.',ex:'Der Moderator führte souverän durch die Sendung.'},
+  {de:'die Live-Übertragung',zh:'直播',hint:'Nomen, f.',ex:'Die Live-Übertragung erreichte Millionen Zuschauer.'},
+  {de:'die Dokumentation,-en',zh:'纪录片',hint:'Nomen, f.',ex:'Die Dokumentation zeigt die Folgen des Klimawandels.'},
+  {de:'die Einschaltquote,-n',zh:'收视率',hint:'Nomen, f.',ex:'Die Einschaltquote sank in den letzten Jahren.'},
+  {de:'der öffentlich-rechtliche Rundfunk',zh:'公共广播',hint:'Nomen, m.',ex:'Der öffentlich-rechtliche Rundfunk wird durch Gebühren finanziert.'},
+  {de:'die Boulevardpresse',zh:'八卦媒体',hint:'Nomen, f.',ex:'Die Boulevardpresse konzentriert sich auf Skandale.'},
+  {de:'der Investigativjournalismus',zh:'调查新闻',hint:'Nomen, m.',ex:'Investigativjournalismus deckte den Korruptionsskandal auf.'},
+  {de:'zensieren',zh:'审查',hint:'Verb',ex:'In autoritären Staaten werden kritische Berichte zensiert.'},
+  {de:'verbreiten',zh:'传播',hint:'Verb',ex:'Falschinformationen verbreiten sich viral.'},
 ];
 
 const vocabDecks = {
@@ -972,6 +1120,7 @@ const vbpData = {
     {v:'sich sorgen um +A',zh:'担心',ex:'Die Mutter sorgt sich um ihr Kind.'},
     {v:'sich handeln um +A',zh:'涉及',ex:'Es handelt sich um ein Missverständnis.'},
     {v:'kämpfen um +A',zh:'为...而斗争',ex:'Sie kämpfen um ihre Rechte.'},
+    {v:'verfügen über +A',zh:'拥有',ex:'Das Hotel verfügt über ein Schwimmbad.'},
   ],
   'Dativ': [
     {v:'abhängen von +D',zh:'取决于',ex:'Das hängt vom Wetter ab.'},
@@ -991,7 +1140,6 @@ const vbpData = {
     {v:'profitieren von +D',zh:'从...中获益',ex:'Wir profitieren von der Digitalisierung.'},
     {v:'halten von +D',zh:'对...持看法',ex:'Was hältst du von dieser Idee?'},
     {v:'überzeugen von +D',zh:'使信服',ex:'Ich bin von der Lösung überzeugt.'},
-    {v:'verfügen über +A',zh:'拥有',ex:'Das Hotel verfügt über ein Schwimmbad.'},
   ],
   'Wechselpräp': [
     {v:'sich freuen auf +A / über +A',zh:'期待/高兴',ex:'Ich freue mich auf das Konzert / über das Geschenk.'},
@@ -1061,6 +1209,11 @@ function getDailyPlan() {
       if (weakestSkill === 'wortschatz' && weakSkills[0].pct < 60) tasks.push({text:'📝 弱项攻克：额外词汇复习（闪卡20词）', type:'vocab', page:'vocab_flashcards'});
     }
     tasks.push({text:'📝 今日生词本整理（5分钟）', type:'review', page:''});
+    // UNIcert B2 exam integration
+    if (day >= 5 && day % 5 === 0) tasks.push({text:'🎓 UNIcert B2：阅读样题训练', type:'unicert', page:'unicert_b2_reading'});
+    if (day >= 7 && day % 3 === 0) tasks.push({text:'🎓 UNIcert B2：语法样题训练', type:'unicert', page:'unicert_b2_grammar'});
+    if (day === 9) tasks.push({text:'🎓 UNIcert B2：写作范文学习+模板练习', type:'unicert', page:'unicert_b2_writing'});
+    if (day === 13) tasks.push({text:'🧪 UNIcert B2：考前全真模拟考试', type:'unicert', page:'unicert_b2_mock'});
   } else {
     // C1 Phase: Day 16-45
     let c1Day = day - 15;
@@ -1101,6 +1254,13 @@ function getDailyPlan() {
       if (wsC1.skill === 'wortschatz' && wsC1.pct < 70) tasks.push({text:'📝 弱项攻克：额外词汇闪卡复习', type:'vocab', page:'vocab_flashcards'});
     }
     tasks.push({text:'📝 今日Redemittel收集（从阅读/听力中摘抄）', type:'review', page:''});
+    // UNIcert C1 exam integration
+    if (c1Day >= 3 && c1Day % 4 === 0) tasks.push({text:'🎓 UNIcert C1：阅读样题训练', type:'unicert', page:'unicert_c1_reading'});
+    if (c1Day >= 5 && c1Day % 3 === 0) tasks.push({text:'🎓 UNIcert C1：语法样题训练', type:'unicert', page:'unicert_c1_grammar'});
+    if (c1Day === 8) tasks.push({text:'🎓 UNIcert C1：写作范文学习+模板练习', type:'unicert', page:'unicert_c1_writing'});
+    if (c1Day >= 10 && c1Day % 7 === 0) tasks.push({text:'🧪 UNIcert C1：全真模拟考试', type:'unicert', page:'unicert_c1_mock'});
+    if (c1Day === 25) tasks.push({text:'🎯 UNIcert C1：阅读专项突破', type:'unicert', page:'unicert_skill_reading'});
+    if (c1Day === 27) tasks.push({text:'🎯 UNIcert C1：语法专项突破', type:'unicert', page:'unicert_skill_grammar'});
   }
   return {day, isB2, phase, tasks};
 }
@@ -1118,8 +1278,969 @@ function getGrammarName(id) {
   return m[id]||id;
 }
 
+// ===== UNIcert-CN EXAM MODULE =====
+// B2 Leseverstehen (LV) Sample Exam — 30 pts
+const unicertB2LV = {
+  title: "UNIcert-CN B2 Leseverstehen — Musterprüfung",
+  time: "60 Minuten | 30 Punkte",
+  parts: [
+    { part:"Teil 1: Überschriften zuordnen (10 Pkt)", desc:"Ordnen Sie die 5 Überschriften den passenden Textabschnitten zu. Zwei Überschriften bleiben übrig.", type:"heading_match",
+      headings: ["A. Digitalisierung im Gesundheitswesen", "B. Fachkräftemangel in der Pflege", "C. Neue Pflegeausbildung seit 2020", "D. Telemedizin als Lösung für den ländlichen Raum", "E. Finanzierung der Krankenhäuser", "F. Prävention statt Behandlung", "G. Robotik in der Altenpflege"],
+      texts: [
+        "Die generalistische Pflegeausbildung fasst seit Januar 2020 die bisher getrennten Ausbildungsgänge der Alten-, Kranken- und Kinderkrankenpflege zusammen. Auszubildende können sich nun in einem breiteren Spektrum qualifizieren und später flexibler zwischen den verschiedenen Pflegebereichen wechseln. Die EU-weite Anerkennung des Abschlusses verbessert zudem die Mobilität der Fachkräfte innerhalb Europas.",
+        "In vielen ländlichen Regionen Deutschlands fehlt es an Fachärzten. Die Videosprechstunde könnte hier Abhilfe schaffen. Patienten sparen lange Anfahrtswege und Ärzte können mehr Patienten in kürzerer Zeit behandeln. Allerdings gibt es noch Hindernisse: Die technische Infrastruktur ist vielerorts unzureichend und ältere Patienten stehen der digitalen Konsultation oft skeptisch gegenüber.",
+        "Das deutsche Gesundheitssystem gibt jährlich über 400 Milliarden Euro aus. Ein großer Teil fließt in die stationäre Versorgung. Experten fordern seit Jahren eine stärkere Fokussierung auf Vorsorge und Gesundheitsförderung. Studien zeigen, dass jeder in Prävention investierte Euro langfristig vier Euro an Behandlungskosten einsparen kann. Die Umsetzung scheitert jedoch oft an kurzfristigen Budgetzwängen.",
+        "In japanischen Pflegeheimen werden bereits Roboter eingesetzt, die beim Heben von Patienten helfen oder an die Medikamenteneinnahme erinnern. Auch in Deutschland laufen Pilotprojekte. Die Roboter sollen Pflegekräfte nicht ersetzen, sondern von körperlich schweren Routinetätigkeiten entlasten. Kritiker warnen jedoch vor einer Entmenschlichung der Pflege und dem Verlust zwischenmenschlicher Zuwendung.",
+        "Trotz steigender Ausbildungszahlen bleibt die Personallücke in der Pflege groß. Bis 2035 könnten laut Hochrechnungen bis zu 500.000 Pflegekräfte fehlen. Als Ursachen gelten die demografische Alterung, unattraktive Arbeitsbedingungen und die im internationalen Vergleich niedrige Vergütung. Die Politik setzt auf Anwerbung aus dem Ausland und bessere Bezahlung."
+      ],
+      answers: [2,3,5,6,1]  // 0-indexed: C,D,F,G,B
+    },
+    { part:"Teil 2: Richtig/Falsch (10 Pkt)", desc:"Lesen Sie den Text und kreuzen Sie an: richtig oder falsch.", type:"tf",
+      text: "Die Einführung des gesetzlichen Mindestlohns im Jahr 2015 war in Deutschland heftig umstritten. Ökonomen warnten vor massiven Arbeitsplatzverlusten, während Gewerkschaften einen wichtigen Schritt gegen Lohndumping feierten. Acht Jahre später fällt die Bilanz überwiegend positiv aus: Die befürchteten Jobverluste blieben aus. Stattdessen stiegen die Einkommen von rund vier Millionen Beschäftigten, ohne dass die Wettbewerbsfähigkeit der deutschen Wirtschaft nachhaltig litt. Allerdings gibt es weiterhin Kritik: In einigen Branchen, insbesondere im Hotel- und Gaststättengewerbe sowie in der Landwirtschaft, wird der Mindestlohn durch Scheinselbstständigkeit oder nicht erfasste Überstunden umgangen. Die Finanzkontrolle Schwarzarbeit des Zolls, die für die Einhaltung zuständig ist, gilt als personell unterbesetzt. Zudem entbrannte 2022 eine neue Debatte, als die Mindestlohnkommission eine Erhöhung auf 12 Euro empfahl — ein politischer Eingriff, der das eigentlich vorgesehene Verfahren zwischen Arbeitgebern und Gewerkschaften umging.",
+      statements: [
+        {text:"Der Mindestlohn wurde 2015 in Deutschland eingeführt.", answer:true},
+        {text:"Ökonomen waren sich einig, dass der Mindestlohn positive Effekte haben würde.", answer:false},
+        {text:"Die Wettbewerbsfähigkeit der deutschen Wirtschaft wurde durch den Mindestlohn nachhaltig geschädigt.", answer:false},
+        {text:"In manchen Branchen wird der Mindestlohn umgangen.", answer:true},
+        {text:"Der Zoll ist für die Kontrolle des Mindestlohns zuständig.", answer:true},
+        {text:"Die Erhöhung auf 12 Euro folgte dem üblichen Verfahren zwischen Arbeitgebern und Gewerkschaften.", answer:false}
+      ]
+    },
+    { part:"Teil 3: Kurzantwort (10 Pkt)", desc:"Lesen Sie den Text und beantworten Sie die Fragen in Stichworten.", type:"short_answer",
+      text: "Das duale Ausbildungssystem gilt als Erfolgsmodell der deutschen Wirtschaft. Dabei wechseln sich praktische Ausbildung im Betrieb und theoretischer Unterricht in der Berufsschule ab — meist im Rhythmus von drei Tagen Betrieb und zwei Tagen Schule. Die Auszubildenden erhalten eine Vergütung, die je nach Branche zwischen 600 und 1.200 Euro monatlich liegt. Nach drei bis dreieinhalb Jahren endet die Ausbildung mit einer Prüfung vor der Industrie- und Handelskammer (IHK) oder der Handwerkskammer (HWK).\n\nAllerdings kämpft das System mit Herausforderungen: Immer mehr Schulabgänger streben ein Studium an, während viele Ausbildungsplätze unbesetzt bleiben. 2022 blieben rund 69.000 Lehrstellen unbesetzt — ein neuer Höchststand. Gleichzeitig finden viele Jugendliche mit schlechteren Schulabschlüssen keinen Ausbildungsplatz, was auf ein Vermittlungsproblem hindeutet. Die Bundesregierung hat daher eine Ausbildungsgarantie beschlossen, die jedem Jugendlichen einen Ausbildungsplatz oder eine außerbetriebliche Ausbildung zusichert.",
+      questions: [
+        {q:"Aus welchen zwei Teilen besteht das duale Ausbildungssystem?", answer:"Betrieb und Berufsschule"},
+        {q:"Wie viel Geld erhalten Auszubildende monatlich ungefähr?", answer:"600 bis 1.200 Euro"},
+        {q:"Vor welcher Institution findet die Abschlussprüfung statt?", answer:"IHK oder HWK"},
+        {q:"Wie viele Lehrstellen blieben 2022 unbesetzt?", answer:"Rund 69.000"},
+        {q:"Was hat die Bundesregierung beschlossen?", answer:"Ausbildungsgarantie"}
+      ]
+    }
+  ]
+};
+
+// B2 Grammatik Sample Exam — 40 pts, thematisch zum Lesetext "Ausbildung"
+const unicertB2Grammar = {
+  title: "UNIcert-CN B2 Grammatik — Musterprüfung",
+  time: "40 Minuten | 40 Punkte | Thema: Berufsausbildung",
+  parts: [
+    { part:"Aufgabe 1: Lückentext — Konnektoren & Präpositionen (10 Pkt)", desc:"Füllen Sie die Lücken mit passenden Wörtern.", type:"fill",
+      text: "Das duale System gilt (1)___ Erfolgsmodell. Es verbindet Theorie (2)___ Praxis. Viele Jugendliche entscheiden (3)___ für eine Ausbildung, (4)___ sie lieber praktisch arbeiten möchten. (5)___ der Vergangenheit wurde das System oft gelobt, (6)___ jetzt bleiben viele Stellen unbesetzt. Die Betriebe müssen sich (7)___ die veränderten Wünsche der Jugendlichen einstellen. (8)___ die Ausbildungsgarantie Wirkung zeigt, muss (9)___ die Berufsorientierung an Schulen verbessert (10)___ .",
+      blanks: [
+        {answer:"als", hint:"Präposition (als/wie)"},
+        {answer:"und", hint:"Konjunktion"},
+        {answer:"sich", hint:"Reflexivpronomen"},
+        {answer:"weil", hint:"Kausale Konjunktion"},
+        {answer:"In", hint:"Präposition + Dativ"},
+        {answer:"aber", hint:"Adversative Konjunktion"},
+        {answer:"auf", hint:"Präposition (sich einstellen auf)"},
+        {answer:"Damit", hint:"Finale Konjunktion"},
+        {answer:"auch", hint:"Modalpartikel"},
+        {answer:"werden", hint:"Passiv-Hilfsverb"}
+      ]
+    },
+    { part:"Aufgabe 2: Verbalisierung → Nominalisierung (10 Pkt)", desc:"Formen Sie die Nebensätze in Nominalphrasen um.", type:"transform",
+      items: [
+        {clause:"weil die Wirtschaft wächst", answer:"aufgrund des Wirtschaftswachstums", hint:"Kausale Nominalisierung"},
+        {clause:"obwohl die Konkurrenz stark ist", answer:"trotz der starken Konkurrenz", hint:"Konzessive Nominalisierung"},
+        {clause:"nachdem der Vertrag unterschrieben wurde", answer:"nach der Unterschrift des Vertrags", hint:"Temporale Nominalisierung"},
+        {clause:"indem man die Technik verbessert", answer:"durch die Verbesserung der Technik", hint:"Instrumentale Nominalisierung"},
+        {clause:"dass die Arbeitslosigkeit sinkt", answer:"das Sinken der Arbeitslosigkeit", hint:"Subjektsatz → Nominalphrase"},
+        {clause:"wenn die Prüfung bestanden ist", answer:"bei bestandener Prüfung", hint:"Konditionale Nominalisierung"},
+        {clause:"um die Qualität zu steigern", answer:"zur Steigerung der Qualität", hint:"Finale Nominalisierung"},
+        {clause:"weil die Nachfrage gestiegen ist", answer:"wegen der gestiegenen Nachfrage", hint:"Kausale Nominalisierung (PII)"}
+      ]
+    },
+    { part:"Aufgabe 3: Aktiv ↔ Passiv (10 Pkt)", desc:"Formen Sie die Sätze um.", type:"transform",
+      items: [
+        {original:"Man hat das Gesetz geändert.", answer:"Das Gesetz ist geändert worden.", hint:"Perfekt Aktiv → Passiv Perfekt"},
+        {original:"Der Antrag wird bearbeitet.", answer:"Man bearbeitet den Antrag.", hint:"Präsens Passiv → Aktiv"},
+        {original:"Die Ergebnisse lassen sich vergleichen.", answer:"Die Ergebnisse können verglichen werden.", hint:"Passiversatz → Passiv"},
+        {original:"Der Bericht muss geschrieben werden.", answer:"Der Bericht ist zu schreiben.", hint:"Passiv → Passiversatz (sein+zu)"},
+        {original:"Man hat die Prüfung bestanden.", answer:"Die Prüfung ist bestanden worden.", hint:"Perfekt Aktiv → Passiv Perfekt (worden!)"}
+      ]
+    },
+    { part:"Aufgabe 4: Relativsatz ↔ Partizipialattribut (5 Pkt)", desc:"Formen Sie um.", type:"transform",
+      items: [
+        {original:"Die Firma, die wächst", answer:"die wachsende Firma", hint:"Partizip I (aktiv/gleichzeitig)"},
+        {original:"Der Umsatz, der gestiegen ist", answer:"der gestiegene Umsatz", hint:"Partizip II (vorzeitig/abgeschlossen)"},
+        {original:"die Maßnahmen, die zu treffen sind", answer:"die zu treffenden Maßnahmen", hint:"zu + Partizip I (passivisch/Notwendigkeit)"},
+        {original:"das Problem, das gelöst wurde", answer:"das gelöste Problem", hint:"Partizip II (passivisch/abgeschlossen)"},
+        {original:"Der Antrag, der morgen diskutiert wird", answer:"der morgen zu diskutierende Antrag", hint:"zu + Partizip I (zukünftig/passivisch)"}
+      ]
+    },
+    { part:"Aufgabe 5: Irrealer Konditionalsatz (5 Pkt)", desc:"Bilden Sie irreale Konditionalsätze (KII Vergangenheit).", type:"transform",
+      items: [
+        {original:"Er hatte kein Geld. Er kaufte das Auto nicht.", answer:"Wenn er Geld gehabt hätte, hätte er das Auto gekauft.", hint:"Vergangenheit KII: hätte/wäre + PII"},
+        {original:"Sie kam zu spät. Sie verpasste den Zug.", answer:"Wenn sie nicht zu spät gekommen wäre, hätte sie den Zug nicht verpasst.", hint:"KII Vergangenheit mit wäre + PII"},
+        {original:"Ich wusste nichts davon. Ich habe nicht geholfen.", answer:"Wenn ich davon gewusst hätte, hätte ich geholfen.", hint:"wissen → gewusst (KII Vergangenheit)"}
+      ]
+    }
+  ]
+};
+
+// B2 Textproduktion (Writing) Sample — 40 pts
+const unicertB2Writing = {
+  title: "UNIcert-CN B2 Textproduktion — Musterprüfung mit Musterlösung",
+  time: "45-60 Minuten | 200-300 Wörter | 40 Punkte (Ausdruck 15 + Grammatik 15 + Inhalt 10)",
+  prompt: 'Sie haben in der Zeitung eine Stellenanzeige für ein Praktikum im Bereich Marketing gelesen. Schreiben Sie eine formelle Bewerbungs-E-Mail an Frau Dr. Weber (Personalabteilung). Gehen Sie auf folgende Punkte ein:\n\n1. Grund für Ihr Schreiben (Bezug auf die Anzeige vom 15. Mai)\n2. Ihre aktuelle Situation (Student/in der BWL, 4. Semester)\n3. Ihre relevanten Kenntnisse und Erfahrungen (Nebenjob im Verkauf, gute Englischkenntnisse, Auslandssemester in London)\n4. Warum Sie sich für genau dieses Unternehmen interessieren\n5. Bitte um ein Vorstellungsgespräch\n\nVergessen Sie nicht: Betreffzeile, passende Anrede, Einleitung, Schlussformel.',
+  modelAnswer: 'Betreff: Bewerbung um ein Praktikum im Bereich Marketing — Ihre Anzeige vom 15. Mai\n\nSehr geehrte Frau Dr. Weber,\n\nmit großem Interesse habe ich Ihre Stellenanzeige in der Süddeutschen Zeitung vom 15. Mai gelesen. Hiermit bewerbe ich mich bei Ihnen um das ausgeschriebene Praktikum im Bereich Marketing.\n\nZurzeit studiere ich Betriebswirtschaftslehre an der Universität München und befinde mich im vierten Semester. Während meines bisherigen Studiums konnte ich mir fundierte Kenntnisse in den Bereichen Marketing und Marktforschung aneignen. Darüber hinaus habe ich durch einen Nebenjob im Einzelhandel wertvolle Erfahrungen im direkten Kundenkontakt gesammelt. Meine Englischkenntnisse konnte ich während eines Auslandssemesters in London vertiefen.\n\nIhr Unternehmen hat mich aufgrund seiner innovativen Marketingstrategien und der internationalen Ausrichtung besonders angesprochen. Ich würde mich freuen, mein theoretisches Wissen bei Ihnen in die Praxis umsetzen zu können.\n\nGern stehe ich Ihnen für ein persönliches Gespräch zur Verfügung und sende Ihnen auf Wunsch weitere Unterlagen zu.\n\nMit freundlichen Grüßen\n[Ihr Name]',
+  scoring: [
+    {criterion:"Ausdruck (15 Pkt)", details:"Angemessener formeller Ton, abwechslungsreicher Wortschatz, passende Redemittel (hiermit, darüber hinaus, gern). Keine Umgangssprache. Betreffzeile und korrekte Anrede/Grußformel."},
+    {criterion:"Grammatik (15 Pkt)", details:"Korrekte Verbposition (Hauptsatz/Nebensatz), korrekte Adjektivdeklination, Präpositionen mit richtigem Kasus, Konjunktiv II für Höflichkeit (würde mich freuen, könnte). Keine Satzklammerfehler."},
+    {criterion:"Inhalt (10 Pkt)", details:"Alle 5 Aufgabenpunkte wurden vollständig abgedeckt. Logischer Aufbau: Einleitung → Situation → Qualifikation → Motivation → Gesprächsbitte. 200-300 Wörter eingehalten."}
+  ],
+  usefulPhrases: [
+    {de:"mit großem Interesse habe ich ... gelesen", zh:"我怀着极大的兴趣阅读了...", use:"Einleitung — Bezug auf Anzeige"},
+    {de:"hiermit bewerbe ich mich um ...", zh:"我在此申请...", use:"Formelle Bewerbung"},
+    {de:"darüber hinaus", zh:"此外", use:"Zusatzinformation anschließen"},
+    {de:"ich würde mich freuen, ... zu können", zh:"我将很高兴能够...", use:"KII Höflichkeit — Wunsch ausdrücken"},
+    {de:"gern stehe ich für ein persönliches Gespräch zur Verfügung", zh:"我很乐意参加面试", use:"Schluss — Gesprächsbitte"},
+    {de:"aufgrund meiner Erfahrung im Bereich ...", zh:"基于我在...领域的经验", use:"Qualifikation begründen"},
+    {de:"konnte ich mir fundierte Kenntnisse aneignen", zh:"我获得了扎实的知识", use:"Kompetenzen beschreiben"}
+  ]
+};
+
+// C1 Leseverstehen (LV) Sample Exam — 30 pts
+const unicertC1LV = {
+  title: "UNIcert-CN C1 Leseverstehen — Musterprüfung",
+  time: "60 Minuten | 30 Punkte",
+  parts: [
+    { part:"Teil 1: Komplexes Textverständnis (15 Pkt)", desc:"Lesen Sie den Text und wählen Sie die richtige Antwort (A/B/C/D).", type:"mc",
+      text: "Die zunehmende Prekarisierung der Arbeitswelt ist ein Phänomen, das in der soziologischen Forschung seit geraumer Zeit kontrovers diskutiert wird. Während die klassische Erwerbsbiografie — geprägt durch ein unbefristetes Vollzeitarbeitsverhältnis mit geregelten Aufstiegschancen — für einen wachsenden Teil der Erwerbstätigen einem fragmentierten Berufsleben weicht, sind die gesellschaftspolitischen Implikationen dieser Entwicklung keineswegs abschließend geklärt.\n\nPrekäre Beschäftigungsverhältnisse zeichnen sich durch ein Bündel von Merkmalen aus: Befristung, Teilzeitarbeit wider Willen, Leiharbeit, Werkverträge und nicht zuletzt die grassierende Scheinselbstständigkeit. Die Rede ist von einer 'neuen Unübersichtlichkeit' auf dem Arbeitsmarkt, die etablierte Kategorien wie 'Arbeitnehmer' und 'Selbstständiger' zunehmend unterläuft. Diese Entwicklung ist eng mit der Digitalisierung verwoben, die einerseits neue Formen der Erwerbsarbeit ermöglicht — Stichwort Crowdworking und Gig-Economy —, andererseits aber traditionelle Beschäftigungsverhältnisse erodieren lässt.\n\nAus sozialpolitischer Perspektive stellt sich die Frage, wie die sozialen Sicherungssysteme — konzipiert zu Zeiten der industriellen Massenproduktion und des männlichen Alleinverdienermodells — an die neuen Realitäten angepasst werden können, ohne dabei das Fundament der Solidargemeinschaft zu untergraben. Einigkeit herrscht lediglich darüber, dass der Status quo nicht zukunftsfähig ist.",
+      questions: [
+        {q:"Was versteht der Text unter 'Prekarisierung der Arbeitswelt'?", o:["Die Schaffung neuer Arbeitsplätze","Die Zunahme unsicherer Beschäftigungsverhältnisse","Die Digitalisierung der Industrie","Die Senkung der Arbeitslosenquote"], a:1, fb:"Prekarisierung = Zunahme unsicherer/prekärer Arbeit. Der Text nennt Merkmale: Befristung, Teilzeitarbeit wider Willen, Leiharbeit."},
+        {q:"Was bedeutet der Ausdruck 'neue Unübersichtlichkeit' im Text?", o:["Die Unordnung in Unternehmen","Die Unklarheit der Arbeitsmarktstatistik","Die Auflösung traditioneller Beschäftigungskategorien","Die Vielfalt neuer Berufsbezeichnungen"], a:2, fb:"Gemeint ist die Verwischung der Grenzen zwischen Arbeitnehmer und Selbstständiger."},
+        {q:"Welche Rolle spielt die Digitalisierung laut Text?", o:["Sie ist die einzige Ursache der Prekarisierung","Sie ermöglicht neue Arbeitsformen und zerstört gleichzeitig traditionelle","Sie hat keinerlei Einfluss auf die Arbeitswelt","Sie macht alle Arbeitsplätze sicherer"], a:1, fb:"Text: 'einerseits neue Formen...ermöglicht, andererseits traditionelle...erodieren lässt' — ambivalente Rolle."},
+        {q:"Was kritisiert der Text an den sozialen Sicherungssystemen?", o:["Sie sind zu teuer","Sie basieren auf veralteten Modellen","Sie werden zu wenig genutzt","Sie schützen Arbeitnehmer zu stark"], a:1, fb:"Text: 'konzipiert zu Zeiten der industriellen Massenproduktion und des männlichen Alleinverdienermodells'."},
+        {q:"Welche Schlussfolgerung zieht der Text?", o:["Die Sozialsysteme müssen abgeschafft werden","Der gegenwärtige Zustand ist nicht nachhaltig","Prekarisierung ist unvermeidbar","Die Digitalisierung sollte gestoppt werden"], a:1, fb:"Letzter Satz: 'Status quo nicht zukunftsfähig' — Reformbedarf der Sozialsysteme."}
+      ]
+    },
+    { part:"Teil 2: Richtig/Falsch/Text sagt dazu nichts (15 Pkt)", desc:"Kreuzen Sie an: Richtig, Falsch, oder Text gibt keine Auskunft.", type:"tfn",
+      text: "Die Energiewende — verstanden als Umstieg von fossilen Brennstoffen und Kernenergie auf erneuerbare Energiequellen — ist nach dem Atomausstieg 2023 in eine kritische Phase eingetreten. Der Ausbau der Windkraft an Land stockt aufgrund langwieriger Genehmigungsverfahren und lokaler Widerstände. Demgegenüber boomt die Photovoltaik: Die installierte Leistung stieg 2024 um rekordverdächtige 16 Gigawatt. Auch die Windkraft auf See (offshore) verzeichnete Zuwächse, liegt aber hinter den Ausbauzielen zurück.\n\nKontrovers diskutiert wird der Netzausbau. Die Stromtrassen, die Windstrom aus dem windreichen Norden in die Industriezentren im Süden transportieren sollen, stoßen auf erbitterten Widerstand bei Anwohnern und Umweltverbänden. Eine Alternative wäre die vermehrte Errichtung von Gaskraftwerken im Süden, die bei Bedarf einspringen. Dass Erdgas als Brückentechnologie gilt, ist jedoch nach der russischen Invasion in die Ukraine politisch heikel geworden. Die Abhängigkeit von Gasimporten aus autoritären Staaten gilt seither als Sicherheitsrisiko.",
+      statements: [
+        {text:"Der Ausbau der Windkraft an Land verläuft problemlos.", answer:"f"},
+        {text:"Die Photovoltaik wuchs 2024 stark.", answer:"r"},
+        {text:"Der Netzausbau ist unumstritten.", answer:"f"},
+        {text:"Gaskraftwerke werden als mögliche Alternative im Süden diskutiert.", answer:"r"},
+        {text:"Deutschland importiert Gas hauptsächlich aus Norwegen.", answer:"n"},
+        {text:"Die russische Invasion beeinflusste die deutsche Energiepolitik.", answer:"r"}
+      ]
+    }
+  ]
+};
+
+// C1 Grammatik — 40 pts
+const unicertC1Grammar = {
+  title: "UNIcert-CN C1 Grammatik — Musterprüfung",
+  time: "40 Minuten | 40 Punkte | Thema: Digitalisierung & Arbeitsmarkt",
+  parts: [
+    { part:"Aufgabe 1: Subjektive Modalverben (10 Pkt)", desc:"Wählen Sie die korrekte subjektive Modalverbform.", type:"fill",
+      items: [
+        {q:"Die Digitalisierung ___ (sollen) viele Arbeitsplätze gefährden.", answer:"soll", hint:"sollen = Fremdbehauptung (man sagt/behauptet)"},
+        {q:"Die Regierung ___ (wollen) ein neues Gesetz vorbereiten.", answer:"will", hint:"wollen = Eigenbehauptung (die Regierung behauptet selbst)"},
+        {q:"Der Mindestlohn ___ (können) laut Experten bis 2028 auf 15 Euro steigen.", answer:"könne", hint:"KI indirekte Rede (laut Experten → könne)"},
+        {q:"Es ___ (dürfen) bezweifelt werden, ob die Reform greift.", answer:"darf", hint:"dürfen = Vermutung/Zweifel (dürfte wäre wahrscheinlicher)"},
+        {q:"Die Zahl der Arbeitslosen ___ (sollen) um 5% gesunken sein.", answer:"soll", hint:"sollen + Infinitiv Perfekt = Fremdbehauptung Vergangenheit"},
+        {q:"Der Minister ___ (wollen) von nichts gewusst haben.", answer:"will", hint:"wollen + Infinitiv Perfekt = Eigenbehauptung Vergangenheit"},
+        {q:"Das Modell ___ (können) sich als Fehler erweisen.", answer:"könnte", hint:"können KII = vorsichtige Vermutung"},
+        {q:"Die Maßnahmen ___ (dürfen) zu spät kommen.", answer:"dürften", hint:"dürfen KII = sehr wahrscheinliche Vermutung"}
+      ]
+    },
+    { part:"Aufgabe 2: Konjunktiv I — Indirekte Rede (10 Pkt)", desc:"Formen Sie die direkte in indirekte Rede um (KI).", type:"transform",
+      items: [
+        {original:'Der Sprecher sagte: "Die Wirtschaft wächst."', answer:"Der Sprecher sagte, die Wirtschaft wachse.", hint:"wachsen → KI: wachse (3. Pers Sg)"},
+        {original:'Die Ministerin erklärte: "Wir haben die Maßnahmen geprüft."', answer:"Die Ministerin erklärte, sie hätten die Maßnahmen geprüft.", hint:"haben → KI: hätten (Perfekt KI)"},
+        {original:'Der Bericht stellt fest: "Die Armut wird zunehmen."', answer:"Der Bericht stellt fest, die Armut werde zunehmen.", hint:"werden → KI: werde"},
+        {original:'Der Experte betonte: "Man muss schneller handeln."', answer:"Der Experte betonte, man müsse schneller handeln.", hint:"müssen → KI: müsse"},
+        {original:'Die Studie zeigte: "Die Werte sind repräsentativ."', answer:"Die Studie zeigte, die Werte seien repräsentativ.", hint:"sein → KI: seien (3. Pers Pl)"},
+        {original:'Er sagte: "Ich kann das nicht verstehen."', answer:"Er sagte, er könne das nicht verstehen.", hint:"können → KI: könne"},
+        {original:'Der Autor schreibt: "Die These ist widerlegt worden."', answer:"Der Autor schreibt, die These sei widerlegt worden.", hint:"Passiv Perfekt KI: sei + PII + worden"},
+        {original:'Sie fragte: "Seid ihr einverstanden?"', answer:"Sie fragte, ob sie einverstanden seien.", hint:"Indirekte Frage: ob + KI (seid → seien)"}
+      ]
+    },
+    { part:"Aufgabe 3: Erweiterte Partizipialattribute (10 Pkt)", desc:"Lösen Sie die Partizipialattribute in Relativsätze auf.", type:"transform",
+      items: [
+        {original:"das seit Jahren kontrovers diskutierte Thema", answer:"das Thema, das seit Jahren kontrovers diskutiert wird", hint:"PII = passivisch/gleichzeitig"},
+        {original:"die im letzten Quartal stark gestiegenen Energiepreise", answer:"die Energiepreise, die im letzten Quartal stark gestiegen sind", hint:"PII von steigen (Perfekt mit sein) = aktiv/vorzeitig"},
+        {original:"eine von der Regierung zu verabschiedende Verordnung", answer:"eine Verordnung, die von der Regierung zu verabschieden ist", hint:"zu+PII = passivisch/Notwendigkeit (muss)"},
+        {original:"der sich immer weiter verschärfende Wettbewerb", answer:"der Wettbewerb, der sich immer weiter verschärft", hint:"PI mit Reflexivpronomen"},
+        {original:"die nicht mehr nachvollziehbare Entscheidung", answer:"die Entscheidung, die nicht mehr nachvollzogen werden kann", hint:"-bar Adjektiv = können + Passiv"}
+      ]
+    },
+    { part:"Aufgabe 4: Nominalstil — Verbalisierung (10 Pkt)", desc:"Formen Sie die Nominalphrasen in Nebensätze um.", type:"transform",
+      items: [
+        {original:"Bei Nichteinhaltung der Frist drohen Sanktionen.", answer:"Wenn die Frist nicht eingehalten wird, drohen Sanktionen.", hint:"bei + Nominalisierung → wenn/falls"},
+        {original:"Die Einführung des neuen Systems erfolgte trotz erheblicher Widerstände.", answer:"Das neue System wurde eingeführt, obwohl es erhebliche Widerstände gab.", hint:"trotz + Gen → obwohl + Nebensatz"},
+        {original:"Vor Inbetriebnahme des Geräts ist die Bedienungsanleitung zu lesen.", answer:"Bevor das Gerät in Betrieb genommen wird, ist die Bedienungsanleitung zu lesen.", hint:"vor + Nominalisierung → bevor"},
+        {original:"Zur Vermeidung von Missverständnissen bitten wir um Rückmeldung.", answer:"Damit Missverständnisse vermieden werden, bitten wir um Rückmeldung.", hint:"zur + Nominalisierung → damit/final"},
+        {original:"Durch die Automatisierung entfielen zahlreiche Arbeitsplätze.", answer:"Indem automatisiert wurde, entfielen zahlreiche Arbeitsplätze.", hint:"durch + Nominalisierung → indem/modal"}
+      ]
+    }
+  ]
+};
+
+// C1 Writing Sample
+const unicertC1Writing = {
+  title: "UNIcert-CN C1 Textproduktion — Musterprüfung mit Musterlösung",
+  time: "60 Minuten | 250-350 Wörter | 40 Punkte",
+  prompt: 'Thema: Sollte die Vier-Tage-Woche bei vollem Lohnausgleich gesetzlich eingeführt werden?\n\nSchreiben Sie eine Erörterung, in der Sie:\n1. Die aktuelle Situation darstellen\n2. Argumente für die Vier-Tage-Woche diskutieren\n3. Gegenargumente abwägen\n4. Ihre eigene Position begründet darlegen\n\nAchten Sie auf: klare Struktur (Einleitung, Hauptteil, Schluss), angemessene Konnektoren, Nominalstil, Konjunktiv I für indirekte Rede.',
+  modelAnswer: 'Die Diskussion um die Einführung einer Vier-Tage-Woche bei vollem Lohnausgleich hat in den letzten Jahren zunehmend an Fahrt gewonnen. Angesichts des Fachkräftemangels und veränderter Lebensmodelle stellt sich die Frage, ob das traditionelle Fünf-Tage-Modell noch zeitgemäß ist.\n\nBefürworter führen ins Feld, dass eine verkürzte Arbeitswoche die Produktivität steigern könne. Pilotprojekte in Island und Großbritannien hätten gezeigt, dass Beschäftigte bei reduzierter Arbeitszeit konzentrierter und motivierter arbeiteten. Zudem würde die Vereinbarkeit von Familie und Beruf verbessert, was insbesondere für Alleinerziehende von Vorteil wäre. Nicht zuletzt könnte eine bessere Work-Life-Balance stressbedingten Erkrankungen vorbeugen.\n\nDemgegenüber verweisen Kritiker auf die wirtschaftlichen Risiken. Eine pauschale Arbeitszeitverkürzung sei in produzierenden Branchen nicht ohne Produktivitätsverluste umsetzbar. Ferner könne sie den ohnehin bestehenden Fachkräftemangel verschärfen und die Wettbewerbsfähigkeit deutscher Unternehmen im internationalen Vergleich beeinträchtigen. Zudem sei die Finanzierung im öffentlichen Dienst, etwa im Gesundheits- und Bildungssektor, ungeklärt.\n\nMeines Erachtens sollte die Vier-Tage-Woche nicht pauschal gesetzlich vorgeschrieben, sondern als Option in Tarifverhandlungen gestärkt werden. Ein flexibles Modell, das den Beschäftigten ein Wahlrecht zwischen verschiedenen Arbeitszeitmodellen einräumt, würde den unterschiedlichen Bedürfnissen von Arbeitnehmern und Branchen besser gerecht. Entscheidend ist, dass die Arbeitszeitgestaltung im Dialog zwischen allen Beteiligten erfolgt.',
+  scoring: [
+    {criterion:"Ausdruck (15 Pkt)", details:"Präziser Wortschatz (an Fahrt gewinnen, ins Feld führen, demgegenüber, meines Erachtens). Nominalstil (bei reduzierter Arbeitszeit, zur Verbesserung). Konnektorenvielfalt (zudem, ferner, nicht zuletzt, jedoch)."},
+    {criterion:"Grammatik (15 Pkt)", details:"Konjunktiv I korrekt für indirekte Rede (steigern könne, hätten gezeigt, arbeiteten). Konjunktiv II für Hypothesen (würde verbessert, könnte vorbeugen). Partizipialattribute (verkürzte Arbeitswoche, veränderte Lebensmodelle). Nominalisierung (bei reduzierter, zur Verbesserung)."},
+    {criterion:"Inhalt (10 Pkt)", details:"Alle 4 Aufgabenpunkte abgedeckt. Klare Pro-/Contra-Struktur. Eigene Position mit Begründung. Logischer roter Faden. 250-350 Wörter."}
+  ],
+  usefulPhrases: [
+    {de:"angesichts + Genitiv", zh:"鉴于...", use:"Einleitung — Bezug auf aktuelle Lage"},
+    {de:"es stellt sich die Frage, ob...", zh:"问题是是否...", use:"Einleitung — Fragestellung aufwerfen"},
+    {de:"Befürworter führen ins Feld, dass...", zh:"支持者提出的论点是...", use:"Pro-Argumente einleiten"},
+    {de:"demgegenüber", zh:"与此相对", use:"Contra-Seite einleiten"},
+    {de:"ferner / darüber hinaus / nicht zuletzt", zh:"此外/另外/最后同样重要的", use:"Aufzählung von Argumenten"},
+    {de:"meines Erachtens", zh:"依我之见", use:"Eigene Meinung formulieren"},
+    {de:"es wäre zu kurz gegriffen, wenn...", zh:"如果...就太片面了", use:"Differenzierung ausdrücken"},
+    {de:"entscheidend ist, dass...", zh:"决定性的因素是...", use:"Schlussfolgerung betonen"}
+  ]
+};
+
+// ===== UNIcert Mock Exam Data =====
+// B2 Full Mock Exam (timed)
+const unicertB2MockData = {
+  reading: {
+    title: "📖 Leseverstehen (30 Pkt, 50 Min)",
+    text: "Der deutsche Wohnungsmarkt ist in den Ballungszentren seit Jahren angespannt. In Städten wie München, Frankfurt und Berlin sind die Mieten innerhalb eines Jahrzehnts um durchschnittlich 40 Prozent gestiegen. Als Hauptursache gilt die wachsende Nachfrage: Immer mehr Menschen ziehen vom Land in die Städte, während gleichzeitig der Wohnungsneubau mit der Nachfrage nicht Schritt hält.\n\nDie Bundesregierung hat reagiert und eine Reihe von Maßnahmen ergriffen. Dazu gehören die Einführung der Mietpreisbremse, die Erhöhung des Wohngeldes und die Förderung des sozialen Wohnungsbaus. Die Mietpreisbremse, die 2015 eingeführt wurde, begrenzt den Mietanstieg bei Wiedervermietung auf maximal zehn Prozent über der ortsüblichen Vergleichsmiete. Allerdings kritisieren Mietervereine, dass es zu wenige Ausnahmen von der Bremse gebe und Verstöße kaum sanktioniert würden.\n\nKontrovers diskutiert wird auch das Instrument der Milieuschutzsatzung, das Umwandlungen von Miet- in Eigentumswohnungen in bestimmten Gebieten unter Genehmigungsvorbehalt stellt. Während Städte darin ein wichtiges Steuerungsinstrument sehen, argumentieren Eigentümervertreter, die Maßnahme verhindere notwendige Investitionen in den Wohnungsbestand.\n\nEin viel diskutierter Ansatz ist die Gemeinwohlorientierung im Wohnungsbau. Statt renditeorientierter Immobiliengesellschaften könnten Genossenschaften und städtische Wohnungsbaugesellschaften eine größere Rolle spielen — ein Modell, das in Wien seit Jahrzehnten erfolgreich praktiziert wird.",
+    questions: [
+      {q:"Um wie viel Prozent sind die Mieten in Ballungszentren gestiegen?", o:["20%","30%","40%","50%"], a:2},
+      {q:"Wann wurde die Mietpreisbremse eingeführt?", o:["2013","2014","2015","2016"], a:2},
+      {q:"Was bemängeln Mietervereine an der Mietpreisbremse?", o:["Sie ist zu streng","Es gibt zu viele Ausnahmen und wenige Sanktionen","Sie gilt nur in München","Sie wurde noch nicht eingeführt"], a:1},
+      {q:"Wofür steht 'Milieuschutzsatzung'?", o:["Förderung von Luxussanierungen","Schutz vor Umwandlung von Miet- in Eigentumswohnungen","Abschaffung des Mietrechts","Steuersenkung für Immobilienkäufer"], a:1},
+      {q:"Welches internationale Modell wird positiv erwähnt?", o:["London","Paris","Wien","New York"], a:2}
+    ]
+  },
+  grammar: {
+    title: "📝 Grammatik (40 Pkt, 35 Min)",
+    questions: [
+      {q:"___ der hohen Mieten ziehen immer noch Menschen in die Großstädte.", o:["Trotz","Wegen","Aufgrund","Während"], a:0, type:"präp"},
+      {q:"Die Mietpreisbremse ___ 2015 ___ (einführen → Passiv Präteritum).", o:["hat/eingeführt","wurde/eingeführt","ist/eingeführt","wird/eingeführen"], a:1, type:"passiv"},
+      {q:"Wenn die Mieten weiter ___ (steigen), ___ (werden) Wohnen unbezahlbar.", o:["steigen/wird","steigen würden/würde","stiegen/wurde","gestiegen/ist"], a:1, type:"KII"},
+      {q:"Es ___ (sein) wünschenswert, mehr Sozialwohnungen zu bauen.", o:["ist","sei","wäre","war"], a:2, type:"KII"},
+      {q:"Die Politik ___ (behaupten), Maßnahmen ___ (ergreifen → PII) worden.", o:["behauptet/ergriffen","behaupte/ergriffen","behauptet/gegriffen","behaupten/ergriff"], a:0, type:"KI"},
+      {q:"___ Genossenschaften stärker gefördert ___, ___ der Wohnungsmarkt entspannter.", o:["Wenn/wären/wäre","Würden/werden/ist","Hätten/werden/würde","Wenn/sind/ist"], a:1, type:"KII"},
+      {q:"Die Umwandlung von Miet- in Eigentumswohnungen ist in Milieuschutzgebieten ___ (genehmigen → Partizipialattribut: eine ___ Umwandlung).", o:["genehmigende","zu genehmigende","genehmigte","genehmigen"], a:1, type:"partizip"},
+      {q:"Man ___ mehr in den sozialen Wohnungsbau investieren ___ (müssen → KII).", o:["muss/haben","musste/--","müsste/--","müssen/--"], a:2, type:"modal"}
+    ]
+  },
+  writing: {
+    title: "✍️ Textproduktion (40 Pkt, 45-60 Min, 200-300 Wörter)",
+    prompt: "Sie wohnen in einer Großstadt und sind mit der Wohnsituation unzufrieden (hohe Miete, laute Nachbarn, schlechte Anbindung). Schreiben Sie eine formelle Beschwerde an Ihre Hausverwaltung. Gehen Sie auf folgende Punkte ein:\n\n1. Seit wann Sie dort wohnen\n2. Konkrete Beschwerdepunkte\n3. Was Sie bereits unternommen haben\n4. Welche Lösung Sie vorschlagen\n5. Frist für die Antwort"
+  }
+};
+
+// C1 Full Mock Exam (timed)
+const unicertC1MockData = {
+  reading: {
+    title: "📖 Leseverstehen (30 Pkt, 60 Min)",
+    text: "Der Begriff der 'postfaktischen Politik' hat seit dem Brexit-Referendum und der US-Präsidentschaftswahl 2016 Eingang in den allgemeinen Sprachgebrauch gefunden. Gemeint ist ein Politikstil, bei dem nicht Tatsachen und rationale Argumente im Vordergrund stehen, sondern emotionale Appelle und die gezielte Diskreditierung unliebsamer Fakten als 'Fake News' oder 'Elitenpropaganda'. Die Digitalisierung der Kommunikation hat diesen Trend zweifellos beschleunigt: In den Echokammern sozialer Medien und den algorithmisch kuratierten Nachrichtenströmen verfestigen sich Überzeugungen, die keiner empirischen Überprüfung mehr standhalten müssen.\n\nDemokratietheoretisch ist diese Entwicklung brisant. Der demokratische Diskurs setzt — so die klassische Theorie von Jürgen Habermas — den 'zwanglosen Zwang des besseren Arguments' voraus. Wo aber Fakten ihre verhaltenssteuernde Kraft einbüßen, verliert die Demokratie ihre epistemische Grundlage. Andererseits warnen Skeptiker vor einem elitären Paternalismus: Wer definiert, was ein 'Fakt' ist? Die Wissenschaft selbst ist bekanntlich ein diskursives Verfahren, kein unfehlbarer Wahrheitsgenerator.\n\nDie Herausforderung besteht folglich darin, dem postfaktischen Relativismus entgegenzutreten, ohne in einen szientistischen Dogmatismus zu verfallen. Transparenz, Quellenkritik und die Stärkung von Medienkompetenz in der schulischen Bildung erscheinen hier als vielversprechende Ansätze. Letztlich geht es um nicht weniger als die Frage, wie demokratische Öffentlichkeit unter den Bedingungen der digitalen Moderne zu bewahren ist.",
+    questions: [
+      {q:"Was versteht der Text unter 'postfaktischer Politik'?", o:["Politik nach der Wahl","Politik mit Fokus auf Fakten","Emotionale Appelle statt rationaler Argumente","Wissenschaftliche Politikberatung"], a:2},
+      {q:"Welche Rolle spielen soziale Medien laut Text?", o:["Sie fördern den rationalen Diskurs","Sie verstärken die Bildung von Echokammern","Sie ersetzen traditionelle Medien vollständig","Sie verbessern die Faktenprüfung"], a:1},
+      {q:"Was meint Habermas' Begriff vom 'zwanglosen Zwang des besseren Arguments'?", o:["Man muss andere zwingen, einem zuzustimmen","Das beste Argument setzt sich im offenen Diskurs durch","Nur Experten dürfen argumentieren","Argumente sind unwichtig für Demokratie"], a:1},
+      {q:"Welche Gegenposition zum Kampf gegen 'postfaktische Politik' erwähnt der Text?", o:["Man sollte postfaktische Politik akzeptieren","Wer Fakten definiert, übt Definitionsmacht aus (Paternalismus-Vorwurf)","Die Wissenschaft ist immer richtig","Soziale Medien sollten verboten werden"], a:1},
+      {q:"Welche Lösungsansätze schlägt der Text vor?", o:["Abschaffung sozialer Medien","Transparenz, Quellenkritik und Medienkompetenz","Mehr staatliche Zensur","Allein auf Wissenschaft vertrauen"], a:1}
+    ]
+  },
+  grammar: {
+    title: "📝 Grammatik (40 Pkt, 40 Min)",
+    questions: [
+      {q:"___ die Digitalisierung den Diskurs beschleunigt hat, ist unbestritten.", o:["Dass","Ob","Weil","Wenn"], a:0, type:"subjektsatz"},
+      {q:"Es ___ (dürfen) bezweifelt werden, ob reine Faktenchecks ausreichen.", o:["darf","dürfte","durfte","dürfen"], a:0, type:"subj-modal"},
+      {q:"Die Frage, ___ der postfaktischen Politik zu begegnen ___ (sein), steht im Raum.", o:["wie/ist","dass/sei","ob/wäre","wie/sei"], a:0, type:"KI"},
+      {q:"Ohne ___ (prüfen) Fakten ist kein rationaler Diskurs möglich.", o:["geprüfte","prüfende","zu prüfende","prüfen"], a:0, type:"partizip"},
+      {q:"Es wird Zeit, ___ man die Medienkompetenz an Schulen ___ (stärken).", o:["dass/stärkt","wenn/stärkte","um/zu stärken","dass/stärken"], a:0, type:"konj"},
+      {q:"___ der Algorithmen bedarf es kritischer Mediennutzer.", o:["Trotz","Wegen","Angesichts","Aufgrund"], a:2, type:"präp"},
+      {q:"Die These, Fakten ___ an Bedeutung ___ (verlieren → PII), wird kontrovers diskutiert.", o:["verloren hätten","verlieren würden","verloren haben","verloren werden"], a:0, type:"KI-Perf"},
+      {q:"Nicht die Abschaffung, ___ die Reform der Plattformen steht zur Debatte.", o:["aber","sondern","doch","auch"], a:1, type:"konnektor"}
+    ]
+  },
+  writing: {
+    title: "✍️ Textproduktion (40 Pkt, 45-60 Min, 250-350 Wörter)",
+    prompt: "Thema: Sollten soziale Netzwerke gesetzlich verpflichtet werden, politische Werbung vor Wahlen zu kennzeichnen und zu regulieren?\n\nSchreiben Sie eine Erörterung mit: Situationsbeschreibung, Pro-Argumenten, Contra-Argumenten, eigener Position."
+  }
+};
+
+// ===== UNIcert Skill Training Data =====
+// Reading skill training: 100+ questions across 3 types
+const unicertSkillReadingQ = [];
+// Type 1: Heading matching (35 questions)
+(function(){
+  var headings = [
+    {topic:"Beruf & Karriere", h:["A. Neue Arbeitsmodelle im digitalen Zeitalter","B. Fachkräftemangel als Wachstumsbremse","C. Work-Life-Balance — ein überholtes Konzept?","D. Weiterbildung als Karrierebooster","E. Das Ende der Rente mit 67?"], texts:[
+      "Homeoffice, Gleitzeit und Vertrauensarbeitszeit sind aus der modernen Arbeitswelt nicht mehr wegzudenken. Die Corona-Pandemie wirkte als Katalysator für flexible Arbeitsmodelle. Allerdings zeigt sich: Flexible Arbeit kann auch zur ständigen Erreichbarkeit führen.",
+      "Unternehmen in Deutschland finden zunehmend kein geeignetes Personal. Besonders betroffen sind IT- und Ingenieurberufe. Als Ursachen gelten der demografische Wandel und die mangelnde Attraktivität der MINT-Fächer bei Studierenden.",
+      "Die Grenzen zwischen Arbeit und Freizeit verschwimmen zunehmend. Während die einen die Flexibilität schätzen, warnen andere vor digitalem Burnout. Die Frage ist, ob das klassische Konzept der Work-Life-Balance noch tragfähig ist.",
+      "Die Lebenserwartung steigt, das Renteneintrittsalter auch. Doch viele Arbeitnehmer können oder wollen nicht bis 67 arbeiten. Die Politik diskutiert über flexiblere Übergänge und Teilrente — eine Debatte, die immer dringlicher wird."
+    ], answers:[0,1,2,3]}
+  ];
+  // Build 35 heading-matching questions from 7 topic groups
+  var allTopics = [
+    {topic:"Beruf & Karriere", h:["A. Flexible Arbeitsmodelle","B. Fachkräftemangel als Wachstumsbremse","C. Work-Life-Balance neu gedacht","D. Digitalisierung der Arbeitswelt","E. Das Rentensystem im Wandel"], texts:[
+      "Immer mehr Unternehmen bieten Gleitzeit und Vertrauensarbeitszeit an. Die Pandemie wirkte hier als Beschleuniger. Doch flexible Arbeit kann auch zur Entgrenzung von Arbeit und Privatleben führen.",
+      "Trotz steigender Arbeitslosenzahlen können viele Stellen nicht besetzt werden. IT-Fachkräfte und Pflegepersonal sind Mangelware. Die Bundesregierung setzt nun auf ein neues Einwanderungsgesetz.",
+      "Die ständige Erreichbarkeit per Smartphone führt zu Stress und Schlafstörungen. Psychologen empfehlen klare Grenzen zwischen Arbeitszeit und Freizeit. Einige Länder haben ein 'Recht auf Nichterreichbarkeit' gesetzlich verankert.",
+      "KI und Automatisierung verändern die Tätigkeitsprofile in nahezu allen Branchen. Während einfache Routinetätigkeiten wegfallen, entstehen neue Anforderungen im Bereich Datenanalyse und KI-Management.",
+      "Die gesetzliche Rente reicht für viele nicht mehr aus. Die Riester-Rente gilt als gescheitert, die Aktienrente als Hoffnungsträger. Experten fordern eine grundlegende Reform des gesamten Alterssicherungssystems."
+    ], answers:[0,1,2,3,4]},
+    {topic:"Gesundheit", h:["A. Prävention als Kostensenker","B. Digitalisierung im Gesundheitswesen","C. Pflegenotstand in Deutschland","D. Psychische Erkrankungen nehmen zu","E. Ernährung im Wandel"], texts:[
+      "Vorbeugen ist besser als Heilen — dieser Grundsatz gewinnt in der Gesundheitspolitik an Bedeutung. Studien belegen, dass jeder in Prävention investierte Euro das Gesundheitssystem langfristig entlastet.",
+      "Die elektronische Patientenakte kommt. Videosprechstunden werden Alltag. Doch Datenschützer warnen: Die Gesundheitsdaten der Bürger müssen besonders geschützt werden.",
+      "Bis 2035 könnten in Deutschland eine halbe Million Pflegekräfte fehlen. Die Bezahlung ist schlecht, die Arbeitsbedingungen sind hart. Initiativen zur Anwerbung aus dem Ausland stoßen auf bürokratische Hürden.",
+      "Burnout und Depressionen haben in den letzten Jahren dramatisch zugenommen. Die WHO stuft psychische Erkrankungen als eine der größten Herausforderungen für das Gesundheitssystem des 21. Jahrhunderts ein.",
+      "Der Fleischkonsum sinkt, pflanzliche Alternativen boomen. Ernährungswissenschaftler sehen diesen Trend positiv, warnen aber vor Mangelerscheinungen bei rein veganer Ernährung ohne ausreichende Supplementierung."
+    ], answers:[0,1,2,3,4]},
+    {topic:"Umwelt & Klima", h:["A. Erneuerbare Energien auf dem Vormarsch","B. Verkehrswende stockt","C. Klimagerechtigkeit global","D. Artensterben — die stille Katastrophe","E. Nachhaltiger Konsum"], texts:[
+      "Wind- und Solarenergie decken inzwischen fast die Hälfte des deutschen Strombedarfs. Die Abschaltung der letzten Kernkraftwerke hat entgegen vieler Befürchtungen nicht zu Blackouts geführt.",
+      "Der Ausbau des öffentlichen Nahverkehrs kommt nur schleppend voran. Während Städte Fahrradwege ausbauen, fehlt es im ländlichen Raum an Alternativen zum Auto. Die Verkehrswende droht zur sozialen Frage zu werden.",
+      "Die Hauptleidtragenden des Klimawandels leben im globalen Süden, obwohl sie am wenigsten zu den Emissionen beigetragen haben. Der Loss-and-Damage-Fonds der UN ist ein erster Schritt, aber viele Fragen bleiben offen.",
+      "Weltweit sind rund eine Million Tier- und Pflanzenarten vom Aussterben bedroht. Die Ursachen sind vielfältig: Lebensraumzerstörung, Klimawandel, Umweltverschmutzung. Das sechste große Massenaussterben der Erdgeschichte ist menschengemacht.",
+      "Second-Hand-Kleidung, Unverpackt-Läden und Repair-Cafés liegen im Trend. Studien zeigen: Vor allem jüngere Konsumenten hinterfragen ihr Kaufverhalten und sind bereit, für Nachhaltigkeit mehr zu bezahlen."
+    ], answers:[0,1,2,3,4]},
+    {topic:"Bildung", h:["A. Bildungsungerechtigkeit in Deutschland","B. Digitalisierung der Schulen","C. Lebenslanges Lernen","D. Das duale System unter Druck","E. Frühkindliche Bildung"], texts:[
+      "Der Bildungserfolg hängt in Deutschland stärker vom Elternhaus ab als in den meisten anderen OECD-Ländern. Kinder aus bildungsfernen Schichten haben deutlich schlechtere Chancen auf einen Gymnasialbesuch.",
+      "Nach dem Digitalpakt folgt die Ernüchterung: Viele Schulen haben zwar Tablets, aber kein pädagogisches Konzept für deren Einsatz. Lehrkräfte beklagen fehlende Fortbildungen im Bereich digitale Didaktik.",
+      "In der Wissensgesellschaft ist die Erstausbildung nur noch der Anfang. Die Halbwertszeit von Wissen sinkt, neue Technologien erfordern ständige Anpassung. Bildungseinrichtungen reagieren mit flexiblen Modulen und Micro-Credentials.",
+      "Immer weniger Jugendliche entscheiden sich für eine Berufsausbildung. Der Run auf die Universitäten hält an. Gleichzeitig bieten Handwerksberufe gute Verdienstmöglichkeiten und hohe Jobsicherheit.",
+      "Die ersten Lebensjahre sind entscheidend für die kognitive Entwicklung. Dennoch geben viele Bundesländer weniger für Kitas aus als für Universitäten. Experten fordern eine Umkehr der Bildungsausgaben-Pyramide."
+    ], answers:[0,1,2,3,4]},
+    {topic:"Medien & Digitalisierung", h:["A. Fake News als Demokratiegefahr","B. Datenschutz vs. Datennutzung","C. Der Niedergang der Printmedien","D. Influencer-Marketing","E. KI in der Medienproduktion"], texts:[
+      "Gezielte Desinformationskampagnen haben das Potenzial, Wahlen zu beeinflussen. Social-Media-Plattformen stehen unter Druck, mehr gegen Fake News zu tun — doch wo die Grenze zwischen Meinungsfreiheit und Zensur verläuft, ist umstritten.",
+      "Die DSGVO hat den Datenschutz in Europa gestärkt. Unternehmen beklagen jedoch hohe Bürokratiekosten und Wettbewerbsnachteile gegenüber außereuropäischen Konkurrenten. Die Debatte um Datensouveränität bleibt aktuell.",
+      "Die Auflagenzahlen von Tageszeitungen sinken seit Jahren. Redaktionen schrumpfen, Lokalredaktionen verschwinden ganz. Was das für die lokale Öffentlichkeit und die Demokratie bedeutet, wird erst allmählich sichtbar.",
+      "Jugendliche orientieren sich zunehmend an Influencern statt an klassischer Werbung. Die Grenze zwischen authentischer Empfehlung und bezahlter Werbung ist oft fließend. Der Gesetzgeber hat die Kennzeichnungspflicht verschärft.",
+      "ChatGPT und Co. revolutionieren die Contentproduktion. Nachrichtenagenturen experimentieren mit KI-generierten Texten. Die Frage ist: Wer haftet, wenn die KI Fehler macht?"
+    ], answers:[0,1,2,3,4]},
+    {topic:"Migration & Integration", h:["A. Fachkräfteeinwanderung","B. Integration in den Arbeitsmarkt","C. Asylpolitik in Europa","D. Kulturelle Identität in der Einwanderungsgesellschaft","E. Sprachförderung als Schlüssel"], texts:[
+      "Deutschland braucht jährlich 400.000 Zuwanderer aus Drittstaaten, um dem demografischen Wandel zu begegnen. Das neue Fachkräfteeinwanderungsgesetz soll die bürokratischen Hürden senken und Deutschland als Einwanderungsland attraktiver machen.",
+      "Die Integration von Geflüchteten in den Arbeitsmarkt verläuft schleppend. Sprachbarrieren, Qualifikationsunterschiede und rechtliche Unsicherheiten bremsen den Prozess. Pilotprojekte zeigen jedoch, dass gezielte Förderung wirkt.",
+      "Die EU ringt um eine gemeinsame Asylpolitik. An den Außengrenzen kommt es zu menschenunwürdigen Zuständen, während sich die Mitgliedstaaten gegenseitig blockieren. Eine Einigung scheint in weiter Ferne.",
+      "Deutschland ist längst eine Einwanderungsgesellschaft. Die Frage, was 'deutsch sein' bedeutet, wird vor dem Hintergrund zunehmender Diversität neu verhandelt. Leitkultur-Debatten polarisieren, während hybride Identitäten Alltag werden.",
+      "Ohne Deutschkenntnisse ist eine Teilhabe an Gesellschaft und Arbeitsmarkt kaum möglich. Integrationskurse sind überlastet, die Qualität schwankt. Ehrenamtliche springen ein, wo der Staat an seine Grenzen stößt."
+    ], answers:[0,1,2,3,4]},
+    {topic:"Europa & Internationales", h:["A. Die Zukunft der EU","B. Globale Handelskonflikte","C. Klimadiplomatie","D. Menschenrechte weltweit","E. Internationale Sicherheitspolitik"], texts:[
+      "Die Europäische Union steht vor einer Richtungsentscheidung. Zwischen Vertiefung und Erweiterung, zwischen mehr Integration und Renationalisierung muss sie ihren Weg finden. Die Beitrittsperspektive für die Ukraine stellt die Gemeinschaft vor historische Herausforderungen.",
+      "Der Handelskonflikt zwischen den USA und China dominiert die Schlagzeilen. Europa steht zwischen den Fronten: Einerseits Partner, andererseits Konkurrent beider Mächte. Die Diversifizierung von Lieferketten wird zur strategischen Priorität.",
+      "Internationale Klimakonferenzen produzieren regelmäßig ambitionierte Ziele, doch die Umsetzung hinkt hinterher. COP28 brachte den Beschluss zur Abkehr von fossilen Brennstoffen — ein historischer Erfolg, dessen konkrete Ausgestaltung jedoch unklar bleibt.",
+      "Die weltweite Lage der Menschenrechte verschlechtert sich. Autoritäre Regime setzen zunehmend auf Repression. Die internationale Gemeinschaft reagiert uneinheitlich: Zwischen Sanktionen und Realpolitik klafft eine große Lücke.",
+      "Hybride Kriegsführung — eine Mischung aus militärischen Mitteln, Cyberangriffen, Desinformation und Wirtschaftsdruck — stellt die internationale Sicherheitsarchitektur vor neue Herausforderungen. Klassische Verteidigungsbündnisse müssen ihre Strategien grundlegend überdenken."
+    ], answers:[0,1,2,3,4]}
+  ];
+  allTopics.forEach(function(t,i){
+    unicertSkillReadingQ.push({type:"heading",id:"hr_"+i,topic:t.topic,headings:t.h,texts:t.texts,answers:t.answers,fb:"Überschriften zuordnen (Teil 1): Lesen Sie zuerst die Überschriften, dann die Texte. Achten Sie auf Schlüsselwörter, die im Text und in der Überschrift vorkommen."});
+  });
+})();
+
+// Type 2: Richtig/Falsch questions (35 questions)
+(function(){
+  var tfTexts = [
+    {topic:"Wirtschaft", text:"Die Inflation in Deutschland erreichte im Jahr 2022 mit 7,9% den höchsten Stand seit der Wiedervereinigung. Haupttreiber waren die massiv gestiegenen Energiepreise infolge des Ukraine-Kriegs. Die EZB reagierte mit einer Serie von Zinserhöhungen — dem stärksten Zinszyklus in ihrer Geschichte. Für 2025 erwarten Ökonomen eine Abschwächung auf etwa 2,2%. Kritiker werfen der EZB vor, zu spät reagiert zu haben, und warnen vor den bremsenden Effekten höherer Zinsen auf die Konjunktur.", sts:[
+      {text:"Die Inflation erreichte 2022 fast 8%.", answer:"r"},
+      {text:"Die Energiepreise sanken infolge des Ukraine-Kriegs.", answer:"f"},
+      {text:"Die EZB hat die Zinsen gesenkt, um die Inflation zu bekämpfen.", answer:"f"},
+      {text:"Für 2025 wird mit einer Inflation von über 5% gerechnet.", answer:"f"},
+      {text:"Ökonomen sind sich einig, dass die EZB rechtzeitig reagiert hat.", answer:"f"}
+    ]},
+    {topic:"Technologie", text:"Künstliche Intelligenz durchdringt zunehmend den Alltag. KI-gestützte Diagnosesysteme erkennen Hautkrebs mit einer Genauigkeit, die der von erfahrenen Dermatologen mindestens ebenbürtig ist. In der Logistik optimieren Algorithmen Lieferketten und reduzieren Leerfahrten. Im Bildungswesen ermöglichen adaptive Lernsysteme eine personalisierte Lernbegleitung. Allerdings werden auch Risiken sichtbar: Diskriminierende Algorithmen in Bewerbungsverfahren haben gezeigt, dass KI-Systeme bestehende gesellschaftliche Vorurteile reproduzieren und sogar verstärken können.", sts:[
+      {text:"KI kann Hautkrebs ebenso gut erkennen wie Dermatologen.", answer:"r"},
+      {text:"KI wird nur in der Logistik eingesetzt.", answer:"f"},
+      {text:"Adaptive Lernsysteme können personalisiert begleiten.", answer:"r"},
+      {text:"KI-Systeme sind immer frei von Vorurteilen.", answer:"f"},
+      {text:"Algorithmen in Bewerbungsverfahren können diskriminieren.", answer:"r"}
+    ]},
+    {topic:"Gesellschaft", text:"Homeoffice hat sich nach der Pandemie als dauerhaftes Arbeitsmodell etabliert. Laut Statistischem Bundesamt arbeiteten 2024 rund 24 Prozent der Beschäftigten regelmäßig von zu Hause aus. Besonders verbreitet ist das Modell in der IT-Branche (68%) sowie im Finanz- und Versicherungssektor (52%). In der Produktion und im Gesundheitswesen ist Homeoffice dagegen kaum möglich. Die Auswirkungen auf die Immobilienmärkte sind spürbar: Während Büroflächen in Innenstadtlagen an Wert verlieren, steigt die Nachfrage nach Wohnraum mit Arbeitszimmer im Umland.", sts:[
+      {text:"Homeoffice ist nach der Pandemie wieder verschwunden.", answer:"f"},
+      {text:"2024 arbeitete etwa ein Viertel der Beschäftigten im Homeoffice.", answer:"r"},
+      {text:"In der IT-Branche ist Homeoffice überdurchschnittlich verbreitet.", answer:"r"},
+      {text:"Büroflächen in Innenstädten gewinnen an Wert.", answer:"f"},
+      {text:"Homeoffice hat Auswirkungen auf den Immobilienmarkt.", answer:"r"}
+    ]}
+  ];
+  tfTexts.forEach(function(t,i){
+    unicertSkillReadingQ.push({type:"tf",id:"tf_"+i,topic:t.topic,text:t.text,sts:t.sts,fb:"Richtig/Falsch (Teil 2): Lesen Sie zuerst die Aussagen, dann den Text. Achten Sie auf absolute Aussagen (immer, nie, alle) — diese sind meist falsch."});
+  });
+})();
+
+// Type 3: Short answer / detail questions (35 questions)
+(function(){
+  var saTexts = [
+    {topic:"Stadtentwicklung", text:"Die Stadt Freiburg im Breisgau gilt als Vorreiterin nachhaltiger Stadtentwicklung. Bereits in den 1970er Jahren formierte sich Widerstand gegen den Bau eines Kernkraftwerks, was zur Entwicklung eines ökologischen Bewusstseins führte. Die Stadt setzt auf einen Mix aus Radverkehrsförderung (Fahrradanteil am Verkehr: 34%), einem dichten ÖPNV-Netz und autofreien Quartieren wie Vauban. Der Energieverbrauch pro Kopf liegt rund 30% unter dem Bundesdurchschnitt. Das Fraunhofer-Institut bescheinigt Freiburg das Potenzial, bis 2038 klimaneutral zu sein — früher als die meisten deutschen Städte.", qs:[
+      {q:"Wie hoch ist der Fahrradanteil am Verkehr in Freiburg?", answer:"34 Prozent"},
+      {q:"Wie heißt das autofreie Quartier in Freiburg?", answer:"Vauban"},
+      {q:"Um wie viel Prozent liegt der Energieverbrauch unter dem Bundesdurchschnitt?", answer:"30%"},
+      {q:"Bis wann könnte Freiburg klimaneutral sein?", answer:"2038"},
+      {q:"In welchem Jahrzehnt formierte sich Widerstand gegen das Kernkraftwerk?", answer:"1970er Jahre"}
+    ]},
+    {topic:"Demografie", text:"Japan verzeichnet seit 2010 einen Bevölkerungsrückgang. Die Geburtenrate liegt mit 1,3 Kindern pro Frau weit unter dem Bestandserhaltungsniveau von 2,1. Gleichzeitig ist Japan das Land mit der weltweit höchsten Lebenserwartung (84,5 Jahre). Die Folgen sind gravierend: 2040 werden voraussichtlich 35% der Japaner über 65 Jahre alt sein. Dörfer sterben aus, während die Metropolregion Tokio weiter wächst. Die Regierung versucht mit Familienförderung gegenzusteuern — bislang mit mäßigem Erfolg. Auch Deutschland und viele andere Industrienationen stehen vor ähnlichen Herausforderungen.", qs:[
+      {q:"Seit wann schrumpft Japans Bevölkerung?", answer:"Seit 2010"},
+      {q:"Wie hoch ist die Geburtenrate in Japan?", answer:"1,3 Kinder pro Frau"},
+      {q:"Wie hoch ist die Lebenserwartung in Japan?", answer:"84,5 Jahre"},
+      {q:"Wie viel Prozent der Japaner werden 2040 voraussichtlich über 65 sein?", answer:"35%"},
+      {q:"Welches Niveau braucht es zum Bestandserhalt der Bevölkerung?", answer:"2,1 Kinder pro Frau"}
+    ]}
+  ];
+  saTexts.forEach(function(t,i){
+    unicertSkillReadingQ.push({type:"sa",id:"sa_"+i,topic:t.topic,text:t.text,qs:t.qs,fb:"Kurzantwort (Teil 3): Antworten Sie in Stichworten. Die Fragen folgen meist der Textreihenfolge. Zahlen und Namen sind häufige Antworten."});
+  });
+})();
+
+// Grammar skill training data
+const unicertSkillGrammar = {
+  verbalisierung: {title:"Verbalisierung → Nominalisierung", desc:"B2→C1核心技能：把从句变成名词短语", items:[
+    {q:"weil die Preise steigen →", a:"aufgrund der steigenden Preise / wegen des Preisanstiegs"},
+    {q:"obwohl es massive Proteste gab →", a:"trotz massiver Proteste"},
+    {q:"nachdem das Gesetz verabschiedet wurde →", a:"nach der Verabschiedung des Gesetzes"},
+    {q:"indem die Technologie eingesetzt wird →", a:"durch den Einsatz der Technologie"},
+    {q:"wenn der Vertrag unterschrieben ist →", a:"bei unterschriebenem Vertrag / nach Vertragsunterzeichnung"},
+    {q:"um die Effizienz zu steigern →", a:"zur Steigerung der Effizienz"},
+    {q:"dass die Arbeitslosigkeit sinkt →", a:"das Sinken der Arbeitslosigkeit / der Rückgang der Arbeitslosigkeit"},
+    {q:"bevor das Gerät installiert wird →", a:"vor der Installation des Geräts"},
+    {q:"weil die Nachfrage zurückgegangen ist →", a:"aufgrund des Nachfragerückgangs / wegen der gesunkenen Nachfrage"},
+    {q:"damit Fehler vermieden werden →", a:"zur Vermeidung von Fehlern"},
+  ]},
+  passiv: {title:"Passiv ↔ Aktiv ↔ Passiversatz", desc:"掌握三种被动形式的互相转换", items:[
+    {q:"Man hat das Problem gelöst. → Passiv Perfekt:", a:"Das Problem ist gelöst worden."},
+    {q:"Der Vertrag kann gekündigt werden. → sein+zu:", a:"Der Vertrag ist zu kündigen."},
+    {q:"Das lässt sich leicht erklären. → können+Passiv:", a:"Das kann leicht erklärt werden."},
+    {q:"Man öffnete die Tür. → Passiv Präteritum:", a:"Die Tür wurde geöffnet."},
+    {q:"Die Lösung ist zu finden. → müssen+Passiv:", a:"Die Lösung muss gefunden werden."},
+    {q:"Man hat den Fehler gefunden. → Passiv Perfekt:", a:"Der Fehler ist gefunden worden."},
+    {q:"Die Regeln lassen sich anwenden. → können+Passiv:", a:"Die Regeln können angewendet werden."},
+    {q:"Das Formular ist auszufüllen. → müssen+Passiv:", a:"Das Formular muss ausgefüllt werden."},
+    {q:"Das Haus wurde 2020 gebaut. → Perfekt Passiv:", a:"Das Haus ist 2020 gebaut worden."},
+    {q:"Man sollte den Plan überdenken. → Passiv mit Modalverb:", a:"Der Plan sollte überdacht werden."},
+  ]},
+  partizip: {title:"Relativsatz ↔ Partizipialattribut", desc:"分词定语是C1阅读最核心的语法", items:[
+    {q:"Die Firma, die wächst →", a:"die wachsende Firma (PI = aktiv/gleichzeitig)"},
+    {q:"Der Umsatz, der gestiegen ist →", a:"der gestiegene Umsatz (PII = aktiv/vorzeitig)"},
+    {q:"Das Problem, das gelöst wurde →", a:"das gelöste Problem (PII = passivisch)"},
+    {q:"Die Maßnahmen, die zu treffen sind →", a:"die zu treffenden Maßnahmen (zu+PI = Notwendigkeit)"},
+    {q:"Ein Antrag, der morgen diskutiert wird →", a:"ein morgen zu diskutierender Antrag (zu+PI + Adverb)"},
+    {q:"Der Politiker, der kritisiert wurde →", a:"der kritisierte Politiker (PII passivisch)"},
+    {q:"Die Zahl, die steigt →", a:"die steigende Zahl (PI aktiv)"},
+    {q:"Ein Brief, der nicht geschrieben wurde →", a:"ein nicht geschriebener Brief (PII + Verneinung)"},
+    {q:"Die Ware, die zu liefern ist →", a:"die zu liefernde Ware (zu+PI = Notwendigkeit)"},
+    {q:"Der Kunde, der sich beschwerte →", a:"der sich beschwerende Kunde (PI + Reflexiv)"},
+  ]},
+  konjunktiv: {title:"Konjunktiv I — Indirekte Rede", desc:"KI是C1考试中新闻报道/学术论述的标配", items:[
+    {q:'Er sagte: "Ich komme morgen." → KI:', a:"Er sagte, er komme morgen."},
+    {q:'Sie erklärte: "Wir haben geprüft." → KI:', a:"Sie erklärte, sie hätten geprüft."},
+    {q:'Der Bericht: "Die Werte sind korrekt." → KI:', a:"Der Bericht stellt fest, die Werte seien korrekt."},
+    {q:'Er: "Man muss handeln." → KI:', a:"Er betonte, man müsse handeln."},
+    {q:'Sie: "Ich kann helfen." → KI:', a:"Sie sagte, sie könne helfen."},
+    {q:'Der Experte: "Die Lage wird sich verschlechtern." → KI:', a:"Der Experte warnte, die Lage werde sich verschlechtern."},
+    {q:'Sie: "Ich habe nichts gewusst." → KI:', a:"Sie behauptete, sie habe nichts gewusst."},
+    {q:'Die Studie: "Die Daten sind repräsentativ." → KI:', a:"Die Studie zeigt, die Daten seien repräsentativ."},
+    {q:'Er: "Ich will teilnehmen." → KI:', a:"Er sagte, er wolle teilnehmen."},
+    {q:'Der Autor: "Die These wurde widerlegt." → KI:', a:"Der Autor schreibt, die These sei widerlegt worden."},
+  ]},
+  irreal: {title:"Irreale Konditionalsätze (KII)", desc:"KII Vergangenheit 和 Gegenwart 的区别使用", items:[
+    {q:"Wenn ich Zeit ___(haben), ___(kommen) ich. (Gegenwart)", a:"Wenn ich Zeit hätte, käme/würde ich kommen."},
+    {q:"Wenn ich Zeit ___ ___ (haben), ___ ich ___ (kommen). (Vergangenheit)", a:"Wenn ich Zeit gehabt hätte, wäre ich gekommen."},
+    {q:"Wenn sie Geld ___(haben), ___(kaufen) sie das Auto. (Gegenwart)", a:"Wenn sie Geld hätte, kaufte/würde sie das Auto kaufen."},
+    {q:"Wenn er ___(lernen) ___ (haben), ___ er die Prüfung ___ (bestehen). (Vergangenheit)", a:"Wenn er gelernt hätte, hätte er die Prüfung bestanden."},
+    {q:"Wenn das Wetter schön ___(sein), ___(gehen) wir spazieren. (Gegenwart)", a:"Wenn das Wetter schön wäre, gingen/würden wir spazieren gehen."},
+    {q:"Ohne deine Hilfe ___ ich das nie ___ (schaffen → KII Vergangenheit).", a:"Ohne deine Hilfe hätte ich das nie geschafft."},
+    {q:"Fast ___ er ___ (stürzen → KII Vergangenheit).", a:"Fast wäre er gestürzt."},
+    {q:"Beinahe ___ das Experiment ___ (misslingen → KII Vergangenheit).", a:"Beinahe wäre das Experiment misslungen."},
+  ]}
+};
+
+// ===== UNIcert Page Functions =====
+P['unicert_hub'] = function(){
+  var h = '<h1>🎓 UNIcert-CN 备考中心</h1>';
+  h += '<p>UNIcert-CN 是中国高校广泛认可的德语标准化考试。本模块严格对标 UNIcert-CN B2 和 C1 考试大纲，提供样题解析、全真模拟和专项突破训练，确保你一次通过。</p>';
+  h += '<h2>📋 考试概览</h2>';
+  h += '<table><tr><th>级别</th><th>阅读(LV)</th><th>语法</th><th>写作</th><th>听力(HV)</th><th>总分</th></tr>';
+  h += '<tr><td><b>B2</b></td><td>30 Pkt (50 Min)</td><td>40 Pkt (35 Min)</td><td>40 Pkt (50 Min)</td><td>30 Pkt</td><td>140 Pkt</td></tr>';
+  h += '<tr><td><b>C1</b></td><td>30 Pkt (60 Min)</td><td>40 Pkt (40 Min)</td><td>40 Pkt (60 Min)</td><td>30 Pkt</td><td>140 Pkt</td></tr></table>';
+  h += '<h2>⚡ 快速入口</h2>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_format\')" style="width:100%">📋 B2 考试格式详解</button>';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_c1_format\')" style="width:100%">📋 C1 考试格式详解</button>';
+  h += '<button class="btn btn-gold" onclick="goPage(\'unicert_b2_mock\')" style="width:100%">🧪 B2 全真模拟考试</button>';
+  h += '<button class="btn btn-gold" onclick="goPage(\'unicert_c1_mock\')" style="width:100%">🧪 C1 全真模拟考试</button>';
+  h += '<button class="btn btn-outline" onclick="goPage(\'unicert_skill_reading\')" style="width:100%">🎯 阅读专项突破</button>';
+  h += '<button class="btn btn-outline" onclick="goPage(\'unicert_skill_grammar\')" style="width:100%">🎯 语法专项突破</button>';
+  h += '<button class="btn btn-outline" onclick="goPage(\'unicert_skill_writing\')" style="width:100%">🎯 写作模板宝库</button>';
+  h += '</div>';
+  h += '<h2>📊 考试关键数据</h2>';
+  h += '<div class="tip">UNIcert-CN 采用加权评分制。阅读和语法占总分的50%，写作约占28%，听力约占22%。建议优先攻克阅读和语法。</div>';
+  h += '<div class="warn" style="border-left-color:#f39c12;background:#2e2a1a">B2→C1最大难点：Nominalisierung（名词化）和Partizipialattribute（分词定语）是阅读理解的拦路虎，也是写作提分的关键。请务必重点训练「语法专项突破」中的这两个模块。</div>';
+  return h;
+};
+
+P['unicert_b2_format'] = function(){
+  var h = '<h1>📋 UNIcert-CN B2 考试格式详解</h1>';
+  h += '<h2>1. 阅读 (Leseverstehen) — 30 Pkt / 50 Min</h2>';
+  h += '<p>共3个部分，文章总长约500词。</p>';
+  h += '<table><tr><th>部分</th><th>题型</th><th>题数</th><th>策略</th></tr>';
+  h += '<tr><td>Teil 1</td><td>标题匹配 (Überschriften zuordnen)</td><td>~5题</td><td>先读标题→找关键词→排除法</td></tr>';
+  h += '<tr><td>Teil 2</td><td>判断正误 (Richtig/Falsch)</td><td>~6题</td><td>先读题干→定位段落→逐句比对</td></tr>';
+  h += '<tr><td>Teil 3</td><td>简答 (Kurzantwort)</td><td>~5题</td><td>看问题→找段落→用原文关键词回答</td></tr></table>';
+  h += '<h2>2. 语法 (Grammatik) — 40 Pkt / 35 Min</h2>';
+  h += '<p><b>考点分布：</b></p><ul>';
+  h += '<li>Lückentext (完形填空) — 10 Pkt：连词、介词、代词</li>';
+  h += '<li>Verbalisierung → Nominalisierung — 10 Pkt：从句→名词短语</li>';
+  h += '<li>Aktiv ↔ Passiv — 10 Pkt：主动/被动/被动替代形式互换</li>';
+  h += '<li>Relativsatz ↔ Partizipialattribut — 5 Pkt</li>';
+  h += '<li>Irrealer Konditionalsatz — 5 Pkt：KII条件句</li></ul>';
+  h += '<h2>3. 写作 (Textproduktion) — 40 Pkt / 50 Min</h2>';
+  h += '<p>120-150词，形式通常为：正式信函/邮件、投诉信、申请信、征求意见</p>';
+  h += '<p><b>评分标准：</b>Ausdruck (表达) 15P + Grammatik 15P + Inhalt (内容) 10P</p>';
+  h += '<h2>4. 听力 (Hörverstehen) — 30 Pkt</h2>';
+  h += '<p>短对话+长独白，题型为：判断正误、填空、简答</p>';
+  h += '<div style="margin-top:12px"><button class="btn btn-red" onclick="goPage(\'unicert_b2_reading\')">📖 查看B2阅读样题</button> ';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_grammar\')">📝 查看B2语法样题</button> ';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_writing\')">✍️ 查看B2写作范文</button></div>';
+  return h;
+};
+
+P['unicert_c1_format'] = function(){
+  var h = '<h1>📋 UNIcert-CN C1 考试格式详解</h1>';
+  h += '<h2>C1 vs B2：核心差异</h2>';
+  h += '<table><tr><th>维度</th><th>B2</th><th>C1</th></tr>';
+  h += '<tr><td>阅读</td><td>具体信息检索</td><td>抽象论点分析+隐含态度识别</td></tr>';
+  h += '<tr><td>语法</td><td>基础转换（主被动、从句）</td><td>Nominalstil, erweiterte Partizipialattribute, KI indirekte Rede</td></tr>';
+  h += '<tr><td>写作</td><td>Formeller Brief (120-150 W)</td><td>Erörterung / Stellungnahme (180-200 W)</td></tr>';
+  h += '<tr><td>词汇</td><td>日常+专业基础</td><td>学术抽象词汇, Nomen-Verb-Verbindungen</td></tr></table>';
+  h += '<h2>🔑 C1 通过关键</h2>';
+  h += '<div class="tip"><b>1. Nominalstil:</b> 写作中用Nominalisierung替代从句是B2→C1最显著的提升（z.B. "weil die Preise stiegen" → "aufgrund der steigenden Preise"）。<br><br><b>2. Konjunktiv I:</b> 阅读和写作中KI是标配，必须能识别和正确使用。<br><br><b>3. Partizipialattribute:</b> 考试阅读中最复杂的结构，必须能在脑中自动拆解为Relativsatz。</div>';
+  h += '<div style="margin-top:12px"><button class="btn btn-red" onclick="goPage(\'unicert_c1_reading\')">📖 查看C1阅读样题</button> ';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_c1_grammar\')">📝 查看C1语法样题</button> ';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_c1_writing\')">✍️ 查看C1写作范文</button></div>';
+  return h;
+};
+
 // ===== CONTENT PAGES =====
 const P = {};
+
+// ===== UNIcert Page Functions =====
+P['unicert_b2_reading'] = function(){
+  var e = unicertB2LV;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  e.parts.forEach(function(p,i){
+    h += '<h2>'+p.part+'</h2><p>'+p.desc+'</p>';
+    if (p.type === 'heading_match') {
+      h += '<div class="code-block"><b>Überschriften:</b><ul>';
+      p.headings.forEach(function(hd){h+='<li>'+hd+'</li>';});
+      h += '</ul></div>';
+      p.texts.forEach(function(t,j){
+        h += '<div class="quiz"><b>Text '+(j+1)+':</b><br>'+t+'<br><span style="color:#7b8db5">→ Lösung: '+p.headings[p.answers[j]]+'</span></div>';
+      });
+    } else if (p.type === 'tf') {
+      h += '<div class="code-block">'+p.text+'</div><table>';
+      p.statements.forEach(function(s,j){
+        h += '<tr><td>'+s.text+'</td><td style="color:'+(s.answer?'#22c55e':'#ef4444')+'">'+(s.answer?'Richtig':'Falsch')+'</td></tr>';
+      });
+      h += '</table>';
+    } else if (p.type === 'short_answer') {
+      h += '<div class="code-block">'+p.text+'</div><table>';
+      p.questions.forEach(function(q,j){
+        h += '<tr><td><b>Q:</b> '+q.q+'</td><td style="color:#22c55e">→ '+q.answer+'</td></tr>';
+      });
+      h += '</table>';
+    }
+  });
+  h += '<div class="tip"><b>💡 阅读策略总结：</b><br>Teil 1 (标题匹配): 先读标题找关键词，再读文本找同义表达。<br>Teil 2 (判断正误): 先读题干，定位段落，逐句比对。绝对化词语(immer/nie/alle)往往是falsch标志。<br>Teil 3 (简答): 答案可直接从文中提取，用原文词汇回答，不必改写。</div>';
+  return h;
+};
+
+P['unicert_b2_grammar'] = function(){
+  var e = unicertB2Grammar;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  e.parts.forEach(function(p,i){
+    h += '<h2>'+p.part+'</h2><p>'+p.desc+'</p>';
+    if (p.type === 'fill') {
+      var text = p.text;
+      p.blanks.forEach(function(b,j){
+        text = text.replace('('+(j+1)+')___', '<span style="background:#0f3460;padding:2px 6px;border-radius:3px;color:#22c55e">'+b.answer+'</span> <span style="color:#7b8db5;font-size:.75em">('+b.hint+')</span>');
+      });
+      h += '<div class="code-block">'+text+'</div>';
+    } else if (p.type === 'transform') {
+      h += '<table><tr><th>Original</th><th>Lösung</th><th>Erklärung</th></tr>';
+      p.items.forEach(function(it){
+        h += '<tr><td>'+it.original+'</td><td style="color:#22c55e">'+it.answer+'</td><td style="color:#7b8db5;font-size:.78em">'+it.hint+'</td></tr>';
+      });
+      h += '</table>';
+    }
+  });
+  h += '<div class="tip"><b>💡 B2语法备考重点：</b><br>1. Nominalisierung 是高频考点（weil→wegen, obwohl→trotz）<br>2. Passiv in allen时态（Präsens/Präteritum/Perfekt + Modalverb）<br>3. Partizipialattribute erkennen und bilden<br>4. KII条件句（Gegenwart vs Vergangenheit）</div>';
+  return h;
+};
+
+P['unicert_b2_writing'] = function(){
+  var e = unicertB2Writing;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  h += '<h2>📝 Aufgabe</h2><div class="code-block" style="white-space:pre-wrap">'+e.prompt+'</div>';
+  h += '<h2>⭐ Musterlösung</h2><div class="code-block" style="white-space:pre-wrap">'+e.modelAnswer+'</div>';
+  h += '<h2>📊 评分细则</h2>';
+  e.scoring.forEach(function(s){h+='<div class="quiz"><b>'+s.criterion+'</b><p>'+s.details+'</p></div>';});
+  h += '<h2>💬 高频 Redemittel</h2><table><tr><th>Redemittel</th><th>中文</th><th>使用场景</th></tr>';
+  e.usefulPhrases.forEach(function(p){h+='<tr><td>'+p.de+'</td><td>'+p.zh+'</td><td>'+p.use+'</td></tr>';});
+  h += '</table>';
+  h += '<div class="tip"><b>💡 B2写作高分技巧：</b><br>1. 必须使用KII表达礼貌（würde, könnte, wäre）<br>2. 用Nominalisierung替代从句（weil→aufgrund/wegen）<br>3. 连接词多样化（darüber hinaus, ferner, zudem, außerdem）<br>4. 严格120-150词，超/少都会扣分</div>';
+  return h;
+};
+
+P['unicert_c1_reading'] = function(){
+  var e = unicertC1LV;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  e.parts.forEach(function(p,i){
+    h += '<h2>'+p.part+'</h2><p>'+p.desc+'</p>';
+    if (p.type === 'mc') {
+      h += '<div class="code-block" style="white-space:pre-wrap">'+p.text+'</div>';
+      p.questions.forEach(function(q,j){
+        h += '<div class="quiz"><h4>'+(j+1)+'. '+q.q+'</h4>';
+        q.o.forEach(function(o,k){h+='<div class="q-option'+(k===q.a?' correct':'')+'">'+String.fromCharCode(65+k)+'. '+o+'</div>';});
+        h += '<div class="q-feedback" style="display:block!important;color:#7b8db5;margin-top:6px"><b>Erklärung:</b> '+q.fb+'</div></div>';
+      });
+    } else if (p.type === 'tfn') {
+      h += '<div class="code-block" style="white-space:pre-wrap">'+p.text+'</div><table><tr><th>Aussage</th><th>R / F / N</th></tr>';
+      p.statements.forEach(function(s,j){
+        var c = s.answer==='r'?'#22c55e':s.answer==='f'?'#ef4444':'#f39c12';
+        var t = s.answer==='r'?'Richtig':s.answer==='f'?'Falsch':'Text sagt dazu nichts';
+        h += '<tr><td>'+s.text+'</td><td style="color:'+c+'">'+t+'</td></tr>';
+      });
+      h += '</table>';
+    }
+  });
+  h += '<div class="tip"><b>💡 C1阅读与B2的差异：</b><br>• C1文章更长更抽象，涉及社会、政治、科学话题<br>• 需要识别作者态度（zustimmend/ablehnend/differenziert）<br>• "Text sagt dazu nichts" 选项是C1新增难点<br>• 需要理解隐含意义和修辞手法</div>';
+  return h;
+};
+
+P['unicert_c1_grammar'] = function(){
+  var e = unicertC1Grammar;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  e.parts.forEach(function(p,i){
+    h += '<h2>'+p.part+'</h2><p>'+p.desc+'</p><table>';
+    if (p.type === 'fill') {
+      h += '<tr><th>Frage</th><th>Lösung</th><th>Erklärung</th></tr>';
+      p.items.forEach(function(it){
+        h += '<tr><td>'+it.q+'</td><td style="color:#22c55e">'+it.answer+'</td><td style="color:#7b8db5;font-size:.78em">'+it.hint+'</td></tr>';
+      });
+    } else if (p.type === 'transform') {
+      h += '<tr><th>Original</th><th>Lösung</th><th>Erklärung</th></tr>';
+      p.items.forEach(function(it){
+        h += '<tr><td>'+it.original+'</td><td style="color:#22c55e">'+it.answer+'</td><td style="color:#7b8db5;font-size:.78em">'+it.hint+'</td></tr>';
+      });
+    }
+    h += '</table>';
+  });
+  h += '<div class="tip"><b>💡 C1语法三座大山：</b><br>1. <b>Subjektive Modalverben:</b> sollen (Fremdbehauptung) vs wollen (Eigenbehauptung) vs können/dürfen (Vermutung)<br>2. <b>Konjunktiv I:</b> 新闻报道和学术写作标配，必须能识别和写出所有动词的KI形式<br>3. <b>Erweiterte Partizipialattribute:</b> 考试阅读中最复杂结构，必须能自动拆解为Relativsatz</div>';
+  return h;
+};
+
+P['unicert_c1_writing'] = function(){
+  var e = unicertC1Writing;
+  var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
+  h += '<h2>📝 Thema</h2><div class="code-block" style="white-space:pre-wrap">'+e.prompt+'</div>';
+  h += '<h2>⭐ Musterlösung</h2><div class="code-block" style="white-space:pre-wrap">'+e.modelAnswer+'</div>';
+  h += '<h2>📊 评分细则</h2>';
+  e.scoring.forEach(function(s){h+='<div class="quiz"><b>'+s.criterion+'</b><p>'+s.details+'</p></div>';});
+  h += '<h2>💬 C1 Redemittel</h2><table><tr><th>Redemittel</th><th>中文</th><th>使用场景</th></tr>';
+  e.usefulPhrases.forEach(function(p){h+='<tr><td>'+p.de+'</td><td>'+p.zh+'</td><td>'+p.use+'</td></tr>';});
+  h += '</table>';
+  h += '<div class="tip"><b>💡 C1写作高分核心：</b><br>1. <b>Nominalstil</b> 是C1写作的标志（nicht "weil...", sondern "aufgrund + Gen."）<br>2. <b>KI</b> 必须用于引用他人观点（Experten zufolge sei/könne/habe...）<br>3. <b>Erörterung结构:</b> 引言→Pro→Contra→eigene Position→Schluss<br>4. <b>Abstrakte Nomen</b> 替代动词（entscheiden→Entscheidung, entwickeln→Entwicklung）</div>';
+  return h;
+};
+
+// B2 Full Mock Exam
+// B2 Listening Practice
+P['unicert_b2_listening'] = function(){
+  var h = '<h1>🎧 UNIcert B2 听力训练 (Hörverstehen)</h1>';
+  h += '<p style="color:#f39c12">⏱ 每篇约20-30分钟 | 考试共30分</p>';
+  h += '<div class="warn">⚠️ 此为模拟听力训练（文本+题目）。真实考试中音频播放1-2遍，题目在听之前发放。建议：先读题目→听音频→答题→对答案。</div>';
+  h += '<div id="unicert-b2-listening-container"></div>';
+  return h;
+};
+
+// B2 Speaking Practice
+P['unicert_b2_speaking'] = function(){
+  var h = '<h1>💬 UNIcert B2 口语训练 (Mündliche Kommunikation)</h1>';
+  h += '<p style="color:#f39c12">⏱ 口试：15分钟准备 + 15-20分钟考试 | 占总分25%</p>';
+  h += '<div class="tip">UNIcert口试通常两人一组。考官提前1-2周给3个话题，考试时抽1个。需要展示：连贯表达、互动能力、语法准确性、词汇丰富度。</div>';
+  unicertB2SpeakingTopics.forEach(function(t,i){
+    h += '<div class="quiz"><h3>话题'+(i+1)+'：'+t.topic+'</h3>';
+    h += '<p><b>可能的问题：</b></p><ul>';
+    t.questions.forEach(function(q){h+='<li>'+q+'</li>';});
+    h += '</ul>';
+    h += '<p><b>📌 推荐 Redemittel：</b></p><div class="code-block">'+t.phrases.join(' | ')+'</div>';
+    h += '<details><summary style="cursor:pointer;color:#f39c12">📝 查看参考回答</summary>';
+    h += '<div class="code-block" style="white-space:pre-wrap">'+t.sampleAnswer+'</div></details></div>';
+  });
+  h += '<h2>🗣️ 口试策略</h2>';
+  h += '<div class="tip"><ul>';
+  h += '<li><b>准备阶段（15分钟）：</b>不要写完整句子，只写关键词和Redemittel</li>';
+  h += '<li><b>开场：</b>简短自我介绍（30秒），不要背诵</li>';
+  h += '<li><b>主体：</b>每个观点用"Erstens...Zweitens...Drittens..."结构化</li>';
+  h += '<li><b>互动：</b>对搭档的观点做出反应（"Da stimme ich Ihnen zu..." / "Das sehe ich anders..."）</li>';
+  h += '<li><b>结尾：</b>简短总结+展望（"Zusammenfassend... / Ich bin überzeugt, dass..."）</li>';
+  h += '<li><b>语法：</b>刻意使用KII（wäre/hätte/könnte）、Nebenordnung（deshalb, daher, denn）</li>';
+  h += '</ul></div>';
+  return h;
+};
+
+P['unicert_b2_mock'] = function(){
+  var h = '<h1>🧪 UNIcert-CN B2 全真模拟考试</h1>';
+  h += '<p style="color:#f39c12">⏱ 总计：135分钟 | 140 Punkte</p>';
+  h += '<p>此为限时模拟考试。请在一个完整的135分钟时间段内完成所有部分，中途不要查词典、不要使用翻译工具。完成后点击"提交评分"查看成绩。</p>';
+  h += '<div id="unicert-b2-mock-container"></div>';
+  return h;
+};
+
+// C1 Full Mock Exam
+P['unicert_c1_mock'] = function(){
+  var h = '<h1>🧪 UNIcert-CN C1 全真模拟考试</h1>';
+  h += '<p style="color:#f39c12">⏱ 总计：160分钟 | 140 Punkte</p>';
+  h += '<p>此为限时模拟考试。请在一个完整的160分钟时间段内完成所有部分。</p>';
+  h += '<div id="unicert-c1-mock-container"></div>';
+  return h;
+};
+
+// Reading Skill Training
+P['unicert_skill_reading'] = function(){
+  var h = '<h1>🎯 阅读专项突破训练</h1><p>超过100道阅读题，按题型分类训练。包含标题匹配、判断正误、简答题三种题型。</p>';
+  h += '<div id="unicert-skill-reading-container"></div>';
+  return h;
+};
+
+// Grammar Skill Training
+P['unicert_skill_grammar'] = function(){
+  var h = '<h1>🎯 语法专项突破训练</h1><p>按UNIcert-CN考点分类：Nominalisierung, Passiv↔Aktiv, Partizipialattribute, Konjunktiv I, Irreale Konditionalsätze。</p>';
+  h += '<div id="unicert-skill-grammar-container"></div>';
+  return h;
+};
+
+// Writing Skill Training (with templates)
+P['unicert_skill_writing'] = function(){
+  var h = '<h1>🎯 写作模板宝库</h1>';
+  h += '<h2>📝 B2 书信模板</h2>';
+  h += '<h3>Beschwerdebrief (投诉信)</h3>';
+  h += '<div class="code-block" style="white-space:pre-wrap">Betreff: Beschwerde über [Thema] — [Referenznummer]\n\nSehr geehrte Damen und Herren,\n\nmit diesem Schreiben möchte ich mich über [Sachverhalt] beschweren.\n\nSeit [Datum] bin ich [Kunde/Mieter/...] bei Ihnen. In den letzten [Wochen/Monaten] ist mir aufgefallen, dass [Problembeschreibung mit konkreten Beispielen].\n\nBereits am [Datum] habe ich [Maßnahme] unternommen, um das Problem zu lösen. Leider hat sich die Situation nicht verbessert.\n\nIch schlage vor, dass [Lösungsvorschlag]. Sollte sich die Situation nicht bis zum [Frist — 2 Wochen später] verbessern, sehe ich mich gezwungen, [Konsequenz — z.B. vom Vertrag zurückzutreten].\n\nIch bitte um eine schriftliche Rückmeldung bis spätestens [Datum].\n\nMit freundlichen Grüßen\n[Name]</div>';
+  h += '<h3>Bewerbung (求职信)</h3>';
+  h += '<div class="code-block" style="white-space:pre-wrap">Betreff: Bewerbung um [Position] — Ihre Anzeige vom [Datum]\n\nSehr geehrte/r [Frau/Herr] [Name],\n\nmit großem Interesse habe ich Ihre Stellenanzeige [in der Zeitung/auf Ihrer Website] gelesen. Hiermit bewerbe ich mich um die ausgeschriebene Stelle.\n\nZurzeit [studiere/arbeite] ich [Fach/Position] an [Ort/Unternehmen] und [relevante Erfahrung]. Während [meines Studiums/meiner Tätigkeit] konnte ich mir fundierte Kenntnisse in [Bereich] aneignen. Darüber hinaus habe ich durch [Nebenjob/Praktikum] wertvolle Erfahrungen in [Bereich] gesammelt.\n\nIhr Unternehmen hat mich aufgrund [Grund 1 + Grund 2] besonders angesprochen. Ich würde mich freuen, meine Fähigkeiten bei Ihnen einbringen zu können.\n\nGern stehe ich für ein persönliches Gespräch zur Verfügung.\n\nMit freundlichen Grüßen\n[Name]</div>';
+  h += '<h2>📝 C1 Erörterung 模板</h2>';
+  h += '<h3>Struktur einer Erörterung</h3>';
+  h += '<div class="code-block" style="white-space:pre-wrap"><b>Einleitung (2-3 Sätze):</b>\n• Aktueller Bezug / Relevanz des Themas\n• Kernfrage formulieren\n→ Redemittel: "In den letzten Jahren ist ... zunehmend in den Fokus gerückt." / "Es stellt sich die Frage, ob ..."\n\n<b>Hauptteil — Pro (3-4 Sätze):</b>\n• Argument 1 + Begründung + Beispiel\n• Argument 2 + Begründung\n→ Redemittel: "Befürworter führen ins Feld, dass ..." / "Ferner wird argumentiert, dass ..."\n\n<b>Hauptteil — Contra (3-4 Sätze):</b>\n• Gegenargument 1 + Begründung\n• Gegenargument 2 + Begründung\n→ Redemittel: "Demgegenüber verweisen Kritiker auf ..." / "Es wäre jedoch zu kurz gegriffen, wenn ..."\n\n<b>Schluss — Eigene Position (3-4 Sätze):</b>\n• Abwägende Zusammenfassung\n• Eigene Meinung mit Begründung\n• Ausblick\n→ Redemittel: "Meines Erachtens ..." / "Zusammenfassend lässt sich festhalten, dass ..." / "Entscheidend ist, dass ..."</div>';
+  h += '<h3>Pro-Contra Redemittel Tabelle</h3>';
+  h += '<table><tr><th>Funktion</th><th>B2</th><th>C1</th></tr>';
+  h += '<tr><td>Einleitung</td><td>Das Thema ... wird viel diskutiert.</td><td>Die Diskussion um ... hat in den letzten Jahren zunehmend an Fahrt gewonnen.</td></tr>';
+  h += '<tr><td>Pro</td><td>Ein Vorteil ist, dass ...</td><td>Befürworter führen ins Feld, dass ... / Es lässt sich argumentieren, dass ...</td></tr>';
+  h += '<tr><td>Contra</td><td>Aber es gibt auch Nachteile.</td><td>Demgegenüber verweisen Kritiker auf ... / Dieser Sichtweise ist entgegenzuhalten, dass ...</td></tr>';
+  h += '<tr><td>Differenzierung</td><td>Man sollte aber beachten, dass ...</td><td>Differenzierter betrachtet / Es wäre verfehlt, pauschal zu behaupten, dass ...</td></tr>';
+  h += '<tr><td>Eigene Meinung</td><td>Meiner Meinung nach ...</td><td>Meines Erachtens / Ich vertrete die Auffassung, dass ...</td></tr>';
+  h += '<tr><td>Schluss</td><td>Zum Schluss kann man sagen ...</td><td>Zusammenfassend lässt sich konstatieren / Abschließend ist festzuhalten, dass ...</td></tr></table>';
+  return h;
+};
+
+// 🔥 B2 12-Day Sprint Plan (to May 30)
+P['unicert_b2_sprint'] = function(){
+  var today = new Date();
+  var examDate = new Date(2026,4,30); // May 30, 2026
+  var daysLeft = Math.ceil((examDate - today) / 86400000);
+  if (daysLeft < 0) daysLeft = 0;
+  var sprintDay = Math.max(1, 13 - daysLeft);
+
+  var h = '<h1>🔥 UNIcert B2 12天冲刺计划</h1>';
+  h += '<div style="background:#2e1a1a;border:2px solid #e94560;border-radius:10px;padding:16px;margin:12px 0;text-align:center">';
+  h += '<span style="font-size:2em;font-weight:bold;color:#e94560">'+daysLeft+'</span><br>';
+  h += '<span style="color:#f39c12">天 → 5月30日 UNIcert B2 考试</span><br>';
+  h += '<span style="font-size:.75em;color:#7b8db5">今天是冲刺第 ' + sprintDay + '/12 天</span>';
+  h += '</div>';
+
+  h += '<h2>📋 12天冲刺阶段划分</h2>';
+  h += '<table><tr><th>阶段</th><th>天数</th><th>目标</th><th>强度</th></tr>';
+  h += '<tr><td>🟢 第1-3天</td><td>Day 1-3</td><td>基础诊断 + 弱点定位</td><td>中</td></tr>';
+  h += '<tr><td>🟡 第4-7天</td><td>Day 4-7</td><td>专项突破（每天攻克1个弱项）</td><td>高</td></tr>';
+  h += '<tr><td>🟠 第8-10天</td><td>Day 8-10</td><td>全真模拟 + 错题清零</td><td>极高</td></tr>';
+  h += '<tr><td>🔴 第11天</td><td>Day 11</td><td>总复习 + 写作押题</td><td>中</td></tr>';
+  h += '<tr><td>⚪ 第12天</td><td>Day 12 (5.29)</td><td>考前放松 + 策略回顾</td><td>低</td></tr></table>';
+
+  // Daily breakdown
+  var days = [
+    {d:1,phase:'🟢',title:'诊断日：全真模拟+定位弱项',tasks:[
+      '完成B2全真模拟考试（unicert_b2_mock，计时135分钟）',
+      '记录阅读、语法、写作三个部分的得分',
+      '将所有错题整理到错题本',
+      '晚上：分析错题分布，确定弱项优先级',
+      '写作自评：对照评分标准给自己打分'
+    ]},
+    {d:2,phase:'🟢',title:'语法基础夯实',tasks:[
+      '弱项1：Nominalisierung专项（unicert_skill_grammar → Verbalisierung模块）',
+      '弱项2：Passiv ↔ Aktiv转换训练',
+      'B2语法样题重做（unicert_b2_grammar）',
+      'Grammatik aktiv B2-C1: Kapitel Passiv + Konjunktiv',
+      '错题本回顾：重点复习语法类错题'
+    ]},
+    {d:3,phase:'🟢',title:'阅读策略强化',tasks:[
+      '弱项3：阅读策略训练（unicert_skill_reading → 前4个单元）',
+      'B2阅读样题重做（unicert_b2_reading，计时答题）',
+      '重点训练：标题匹配 + 判断正误',
+      '学习阅读技巧：先读题→定位→比对',
+      '整理阅读高频词汇20个'
+    ]},
+    {d:4,phase:'🟡',title:'突破日：Nominalisierung死磕',tasks:[
+      'unicert_skill_grammar → Nominalisierung：全部10题重做',
+      '自编练习：将5个从句改写为名词短语',
+      '阅读1篇B2文章，圈出所有Nominalisierung结构',
+      '写作练习：用Nominalisierung改写一篇旧作文',
+      '目标：今天Nominalisierung正确率 > 80%'
+    ]},
+    {d:5,phase:'🟡',title:'突破日：Partizipialattribute攻克',tasks:[
+      'unicert_skill_grammar → Partizipialattribute：全部10题',
+      '阅读训练：找5个Partizipialattribute并拆解为Relativsatz',
+      'unicert_b2_grammar → Aufgabe 4 重做',
+      '写作中刻意使用Partizipialattribute（至少3处）',
+      '目标：Partizip识别和转换正确率 > 80%'
+    ]},
+    {d:6,phase:'🟡',title:'突破日：Konjunktiv II 全面掌握',tasks:[
+      'unicert_skill_grammar → Konjunktiv + Irreal：全部18题',
+      'KII Gegenwart vs Vergangenheit 对比练习',
+      '写作中确保每个正式信函至少使用3个KII表达',
+      '背熟sein/haben/werden/modalverben的KII形式',
+      '目标：KII正确率 > 85%'
+    ]},
+    {d:7,phase:'🟡',title:'突破日：阅读速度提升',tasks:[
+      '限时阅读：完成unicert_skill_reading剩余全部单元',
+      '每篇阅读控制在8分钟内完成',
+      '训练技巧：略读→寻读→精读的三步法',
+      '整理Reading高频词汇30个（从所有阅读训练中）',
+      '目标：阅读正确率 > 70%'
+    ]},
+    {d:8,phase:'🟠',title:'模拟日：B2全真模拟考试 #2',tasks:[
+      '上午：完整模拟（unicert_b2_mock，严格计时）',
+      '阅读(45min) → 语法(20min) → 写作(60min)',
+      '下午：逐题分析错因，分类记录',
+      '语法弱项：回到unicert_skill_grammar针对性强化',
+      '阅读弱项：回到unicert_skill_reading强化',
+      '目标：总分 > 60%（通过线）'
+    ]},
+    {d:9,phase:'🟠',title:'模拟日：错题清零 + 写作强化',tasks:[
+      '上午：完成error_review中所有UNIcert相关错题',
+      '写作实战：限时60分钟完成1篇Beschwerdebrief',
+      '写作实战：限时60分钟完成1篇Bewerbung',
+      '对照范文自评：检查Redemittel使用、KII、Nominalisierung',
+      '背诵unicert_b2_writing的全部Redemittel'
+    ]},
+    {d:10,phase:'🟠',title:'模拟日：B2全真模拟考试 #3（最终摸底）',tasks:[
+      '上午：最终模拟（按真实考试流程，不间断）',
+      '目标：阅读正确率>75%，语法>80%',
+      '下午：终极错题整理，制作"考前一张纸"',
+      '考前一张纸 = 最重要的20个语法点 + 10个Redemittel + 易错词',
+      '如果总分仍未过60%，标记弱项明天重点补'
+    ]},
+    {d:11,phase:'🔴',title:'总复习 + 押题写作',tasks:[
+      '上午：考前一张纸反复默写（闭卷）',
+      '核心语法快速过：KII表格、Passiv各时态、Nominalisierung规则',
+      '写作押题：准备3个热门话题模板（数字化/环境/教育）',
+      '下午：轻松复习——只看对的，不刷难题',
+      '晚上：准备考试物品，了解考点路线，早睡'
+    ]},
+    {d:12,phase:'⚪',title:'考试日准备 (5.29)',tasks:[
+      '仅复习：看"考前一张纸" + Redemittel',
+      '不做新题！不做难题！',
+      '散步/运动30分钟，保持心态',
+      '检查：身份证/准考证/笔/手表/水',
+      '晚上9点前入睡，保证8小时睡眠'
+    ]}
+  ];
+
+  h += '<h2>📅 每日详细计划</h2>';
+  days.forEach(function(d){
+    var marker = sprintDay === d.d ? ' <span style="background:#e94560;color:#fff;padding:2px 8px;border-radius:10px;font-size:.7em">← 今天</span>' : '';
+    var doneMarker = sprintDay > d.d ? ' ✅' : '';
+    h += '<div class="quiz" style="border-left:4px solid '+(sprintDay===d.d?'#e94560':sprintDay>d.d?'#22c55e':'#0f3460')+'">';
+    h += '<h4>'+d.phase+' Day '+d.d+'：'+d.title+marker+doneMarker+'</h4>';
+    h += '<ol>';
+    d.tasks.forEach(function(t){h+='<li>'+t+'</li>';});
+    h += '</ol></div>';
+  });
+
+  h += '<h2>🎯 每日必修习惯</h2>';
+  h += '<div class="tip"><ul>';
+  h += '<li><b>早晨15分钟：</b>词汇闪卡复习（vocab_flashcards），重点B2五个主题</li>';
+  h += '<li><b>碎片时间：</b>听Deutschlandfunk / DW新闻10分钟（磨耳朵）</li>';
+  h += '<li><b>睡前10分钟：</b>Redemittel默写+当日错题快速回顾</li>';
+  h += '<li><b>每天至少写50词：</b>用今日学到的Redemittel造句</li>';
+  h += '</ul></div>';
+
+  h += '<h2>📊 考试通过标准（重要！）</h2>';
+  h += '<div class="warn" style="border-left-color:#f39c12;background:#2e2a1a">';
+  h += '<b>⚠️ UNIcert 要求每个部分都≥60%才算通过！</b>不可偏科！<br><br>';
+  h += '如果你阅读90%但语法50%，仍然不通过！必须五科均衡。<br><br>';
+  h += '<b>最低通过线：</b>阅读≥60% | 语法≥60% | 写作≥60% | 听力≥60% | 口语≥60%<br>';
+  h += '<b>冲刺目标：</b>阅读≥75% | 语法≥80% | 写作≥70% | 听力≥65% | 口语≥65%</div>';
+
+  h += '<div style="margin-top:16px;display:flex;gap:8px">';
+  h += '<button class="btn btn-red" onclick="goPage(\'unicert_b2_mock\')">🧪 立即开始模拟考试</button>';
+  h += '<button class="btn btn-gold" onclick="goPage(\'unicert_skill_grammar\')">🎯 语法专项突破</button>';
+  h += '<button class="btn btn-outline" onclick="goPage(\'unicert_skill_reading\')">📖 阅读专项突破</button>';
+  h += '</div>';
+  return h;
+};
+
+// ===== B2 Intensive Training: Listening & Speaking =====
+const unicertB2ListeningData = [
+  {title:"🎧 HV Teil 1: Kurznachrichten", topic:"Wirtschaft", level:"B2",
+   audioDesc:"【模拟音频文本 — 实际考试为音频播放】",
+   transcript:"Die Bundesagentur für Arbeit hat heute die neuesten Arbeitsmarktzahlen veröffentlicht. Demnach ist die Arbeitslosenquote im Mai leicht auf 5,7 Prozent gestiegen. Als Grund nannte die Behörde die schwächelnde Konjunktur. Besonders betroffen ist das verarbeitende Gewerbe, wo im Vergleich zum Vorjahr 23.000 Stellen abgebaut wurden. Positiv entwickelte sich dagegen der Dienstleistungssektor mit einem Plus von 15.000 neuen Stellen. Die Bundesregierung zeigte sich besorgt und kündigte ein Investitionsprogramm für den Mittelstand an.",
+   questions:[
+     {q:"Wie hoch ist die Arbeitslosenquote im Mai?", o:["5,5%","5,7%","6,0%","6,2%"], a:1},
+     {q:"Welcher Sektor hat Stellen abgebaut?", o:["Dienstleistung","IT","Verarbeitendes Gewerbe","Handel"], a:2},
+     {q:"Wie viele neue Stellen entstanden im Dienstleistungssektor?", o:["10.000","15.000","20.000","23.000"], a:1}
+   ]
+  },
+  {title:"🎧 HV Teil 2: Interview — Digitalisierung der Bildung", topic:"Bildung", level:"B2",
+   audioDesc:"【模拟音频文本 — 实际考试为音频播放】",
+   transcript:"Interviewer: Frau Dr. Meier, Sie haben eine Studie zur Digitalisierung an deutschen Schulen durchgeführt. Was sind die wichtigsten Ergebnisse?\n\nDr. Meier: Das zentrale Ergebnis ist ernüchternd: Nur 28 Prozent der Lehrkräfte fühlen sich ausreichend auf digitalen Unterricht vorbereitet. Dabei geht es nicht nur um technische Ausstattung — die hat sich in den letzten Jahren verbessert —, sondern vor allem um didaktische Konzepte.\n\nInterviewer: Woran hapert es konkret?\n\nDr. Meier: Die Fortbildungsangebote sind zu theoretisch. Lehrkräfte brauchen praktische Anleitungen, wie sie zum Beispiel kooperative Lernformen mit digitalen Tools umsetzen können. Ein weiteres Problem ist die ungleiche Ausstattung: Während Gymnasien oft gut ausgestattet sind, fehlt es an Grund- und Förderschulen an allem.\n\nInterviewer: Was empfehlen Sie der Bildungspolitik?\n\nDr. Meier: Erstens: verpflichtende medienpädagogische Module im Lehramtsstudium. Zweitens: regelmäßige, praxisnahe Fortbildungen. Und drittens: eine bedarfsgerechte Finanzierung, die sich nicht an der Schulform, sondern an den tatsächlichen Bedürfnissen orientiert.",
+   questions:[
+     {q:"Wie viel Prozent der Lehrkräfte fühlen sich auf digitalen Unterricht vorbereitet?", o:["18%","28%","38%","48%"], a:1},
+     {q:"Was kritisiert Dr. Meier an den Fortbildungen?", o:["Zu teuer","Zu theoretisch","Zu kurz","Zu selten"], a:1},
+     {q:"Welche Schulform ist laut Dr. Meier besonders schlecht ausgestattet?", o:["Gymnasien","Berufsschulen","Grund- und Förderschulen","Gesamtschulen"], a:2}
+   ]
+  },
+  {title:"🎧 HV Teil 3: Vortrag — Klimawandel und Migration", topic:"Umwelt & Gesellschaft", level:"B2",
+   audioDesc:"【模拟音频文本 — 实际考试为音频播放】",
+   transcript:"Meine Damen und Herren, ich möchte heute über ein Thema sprechen, das in der öffentlichen Debatte oft vernachlässigt wird: den Zusammenhang zwischen Klimawandel und Migration.\n\nDie Weltbank schätzt, dass bis 2050 bis zu 143 Millionen Menschen innerhalb ihrer eigenen Länder aufgrund von Klimaveränderungen migrieren könnten — vor allem in Subsahara-Afrika, Südasien und Lateinamerika. Anders als oft dargestellt, handelt es sich überwiegend um Binnenmigration, nicht um grenzüberschreitende Wanderung.\n\nDrei Faktoren sind entscheidend: Erstens der Anstieg des Meeresspiegels, der Küstenregionen unbewohnbar macht. Zweitens die Zunahme extremer Wetterereignisse wie Dürren und Überschwemmungen, die Ernten vernichten. Und drittens der Verlust der biologischen Vielfalt, der traditionelle Lebensgrundlagen zerstört.\n\nDie internationale Gemeinschaft muss dringend handeln — und zwar auf zwei Ebenen: durch Klimaschutzmaßnahmen, die die Ursachen bekämpfen, und durch Anpassungsstrategien, die die betroffenen Regionen widerstandsfähiger machen. Tun wir das nicht, werden die prognostizierten Zahlen noch deutlich übertroffen werden.",
+   questions:[
+     {q:"Wie viele Menschen könnten laut Weltbank bis 2050 Klima-Migranten werden?", o:["50 Millionen","100 Millionen","143 Millionen","200 Millionen"], a:2},
+     {q:"Welche Art von Migration dominiert laut Vortrag?", o:["Grenzüberschreitende Migration","Binnenmigration","Wirtschaftsmigration","Saisonale Migration"], a:1},
+     {q:"Welcher Faktor wird NICHT als Ursache genannt?", o:["Meeresspiegelanstieg","Extreme Wetterereignisse","Verlust der Artenvielfalt","Bevölkerungswachstum"], a:3}
+   ]
+  }
+];
+
+// B2 Speaking topics & templates
+const unicertB2SpeakingTopics = [
+  {topic:"Studium und Berufswahl", questions:["Warum haben Sie sich für Ihr Studienfach entschieden?","Welche beruflichen Ziele haben Sie?","Wie wichtig ist Ihrer Meinung nach ein Studium für eine erfolgreiche Karriere?"],
+   phrases:["Ich habe mich für ... entschieden, weil ...","Meiner Ansicht nach ...","Ein weiterer wichtiger Aspekt ist ...","Zusammenfassend lässt sich sagen, dass ..."],
+   sampleAnswer:"Ich studiere [Fach], weil mich [Thema] schon seit der Schulzeit interessiert. Meiner Ansicht nach bietet dieses Fach gute Berufsaussichten, insbesondere im Bereich [Bereich]. Nach meinem Abschluss möchte ich gerne in [Branche] arbeiten. Ein weiterer wichtiger Aspekt ist für mich die Möglichkeit, meine Sprachkenntnisse im Beruf einzusetzen."
+  },
+  {topic:"Umwelt und Nachhaltigkeit", questions:["Was tun Sie persönlich für die Umwelt?","Halten Sie Klimaschutzmaßnahmen der Regierung für ausreichend?","Sollte umweltfreundliches Verhalten stärker belohnt werden?"],
+   phrases:["Ich persönlich achte darauf, ...","Was die Regierung betrifft, ...","Einerseits ..., andererseits ...","Meines Erachtens sollte ..."],
+   sampleAnswer:"Ich persönlich achte darauf, möglichst wenig Plastik zu verwenden und mit öffentlichen Verkehrsmitteln zu fahren. Was die Regierung betrifft, bin ich der Meinung, dass die Maßnahmen nicht ausreichen. Einerseits gibt es gute Ansätze wie die Förderung erneuerbarer Energien, andererseits fehlen konkrete Anreize für Bürger, ihr Verhalten zu ändern. Meines Erachtens sollte umweltfreundliches Verhalten durch Steuervergünstigungen belohnt werden."
+  },
+  {topic:"Digitalisierung im Alltag", questions:["Wie hat die Digitalisierung Ihren Alltag verändert?","Sehen Sie eher Chancen oder Risiken in der KI-Entwicklung?","Sollte es ein Recht auf 'digitalen Neustart' geben?"],
+   phrases:["Die Digitalisierung hat dazu geführt, dass ...","Ich sehe sowohl Chancen als auch Risiken ...","Einerseits ..., andererseits ...","Es wäre wünschenswert, wenn ..."],
+   sampleAnswer:"Die Digitalisierung hat dazu geführt, dass ich viele Dinge bequemer erledigen kann — vom Online-Banking bis zur digitalen Bibliothek. Ich sehe sowohl Chancen als auch Risiken in der KI-Entwicklung. Einerseits kann KI die Medizin revolutionieren, andererseits müssen wir sicherstellen, dass menschliche Entscheidungen nicht vollständig durch Algorithmen ersetzt werden. Es wäre wünschenswert, wenn es klare gesetzliche Regelungen zum Einsatz von KI gäbe."
+  },
+  {topic:"Gesundheit und Ernährung", questions:["Achten Sie auf eine gesunde Ernährung? Warum (nicht)?","Was halten Sie von vegetarischer oder veganer Ernährung?","Sollte ungesundes Essen höher besteuert werden?"],
+   phrases:["Ich lege Wert auf ...","Meiner Meinung nach ...","Dafür spricht, dass ... / Dagegen spricht, dass ...","Alles in allem ..."],
+   sampleAnswer:"Ich lege Wert auf eine ausgewogene Ernährung, weil ich mich dann fitter und konzentrierter fühle. Meiner Meinung nach ist vegetarische Ernährung eine sinnvolle Option, nicht nur aus gesundheitlichen, sondern auch aus ökologischen Gründen. Zur Zuckersteuer bin ich geteilter Meinung: Dafür spricht, dass sie gesündere Ernährung fördern könnte. Dagegen spricht, dass sie einkommensschwache Haushalte überproportional belasten würde."
+  },
+  {topic:"Reisen und interkulturelle Erfahrungen", questions:["Welche Reiseerfahrungen haben Sie besonders geprägt?","Was sind Ihrer Meinung nach die Vorteile von Auslandsaufenthalten?","Massentourismus: Fluch oder Segen?"],
+   phrases:["Eine Erfahrung, die mich besonders geprägt hat, war ...","Auslandsaufenthalte bieten die Möglichkeit, ...","Einerseits ..., andererseits ...","Ich bin der festen Überzeugung, dass ..."],
+   sampleAnswer:"Eine Erfahrung, die mich besonders geprägt hat, war mein Aufenthalt in [Land]. Auslandsaufenthalte bieten die Möglichkeit, andere Kulturen aus erster Hand kennenzulernen und Vorurteile abzubauen. Zum Massentourismus: Einerseits schafft er Arbeitsplätze und Einkommen in Urlaubsregionen, andererseits belastet er die Umwelt und führt oft zu einem Verlust lokaler Kultur. Ich bin der festen Überzeugung, dass nachhaltiger Tourismus die Zukunft sein muss."
+  }
+];
 
 P['home'] = function() {
   var day = getStudyDay();
@@ -3530,6 +4651,11 @@ function renderContent() {
     if (pid === 'grammar_quiz') renderGrammarQuiz();
     if (pid === 'error_review') renderErrorReviewQuiz();
     if (pid === 'srs_review') renderSRSReviewQuiz();
+    if (pid === 'unicert_b2_mock') renderUnicertMock('B2');
+    if (pid === 'unicert_c1_mock') renderUnicertMock('C1');
+    if (pid === 'unicert_skill_reading') renderUnicertSkillReading();
+    if (pid === 'unicert_skill_grammar') renderUnicertSkillGrammar();
+    if (pid === 'unicert_b2_listening') renderUnicertB2Listening();
     if (pid === 'daily_reading') { try { renderDailyReading(); } catch(e) { var elR = document.getElementById('daily-reading-container'); if (elR) elR.innerHTML = '<div class="warn">Fehler: ' + e.message + '</div>'; } }
     if (pid === 'daily_test') {
       try { renderDailyTest(); } catch(e) {
@@ -3540,6 +4666,222 @@ function renderContent() {
   }, 50);
   updateCountdowns();
   updateProgress();
+}
+
+// ===== UNIcert Mock Exam Renderers =====
+function renderUnicertMock(level) {
+  var data = level === 'B2' ? unicertB2MockData : unicertC1MockData;
+  var containerId = level === 'B2' ? 'unicert-b2-mock-container' : 'unicert-c1-mock-container';
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var prefix = level === 'B2' ? 'umB2' : 'umC1';
+
+  // Build reading section
+  var html = '<div class="quiz"><h2>'+data.reading.title+'</h2>';
+  html += '<div class="code-block" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">'+data.reading.text+'</div>';
+
+  var rqs = [];
+  data.reading.questions.forEach(function(q,i){
+    var cIdx = q.a;
+    html += '<div style="margin:10px 0"><b>'+(i+1)+'. '+q.q+'</b></div>';
+    q.o.forEach(function(o,k){
+      html += '<div class="q-option" data-prefix="'+prefix+'_r" data-idx="'+i+'" data-opt="'+k+'" onclick="unicertSelect(\''+prefix+'_r\','+i+','+k+')">'+String.fromCharCode(65+k)+'. '+o+'</div>';
+    });
+    html += '<div class="q-feedback" id="'+prefix+'_r-fb-'+i+'"></div>';
+    rqs.push({q:q.q, o:q.o, a:cIdx, f:'Richtige Antwort: '+String.fromCharCode(65+cIdx)+'. '+q.o[cIdx]});
+  });
+
+  // Build grammar section
+  html += '<h2 style="margin-top:20px">'+data.grammar.title+'</h2>';
+  var gqs = [];
+  data.grammar.questions.forEach(function(q,i){
+    html += '<div style="margin:10px 0"><b>'+(i+1)+'. '+q.q+'</b></div>';
+    q.o.forEach(function(o,k){
+      html += '<div class="q-option" data-prefix="'+prefix+'_g" data-idx="'+i+'" data-opt="'+k+'" onclick="unicertSelect(\''+prefix+'_g\','+i+','+k+')">'+String.fromCharCode(65+k)+'. '+o+'</div>';
+    });
+    html += '<div class="q-feedback" id="'+prefix+'_g-fb-'+i+'"></div>';
+    gqs.push({q:q.q, o:q.o, a:q.a, f:'Richtige Antwort: '+String.fromCharCode(65+q.a)+'. '+q.o[q.a]+(q.type?' ['+q.type+']':'')});
+  });
+
+  // Build writing section
+  html += '<h2 style="margin-top:20px">'+data.writing.title+'</h2>';
+  html += '<div class="code-block" style="white-space:pre-wrap">'+data.writing.prompt+'</div>';
+  html += '<textarea id="'+prefix+'_writing" style="min-height:200px;margin:10px 0" placeholder="Schreiben Sie Ihren Text hier (B2: 200-300 Wörter, C1: 250-350 Wörter)..."></textarea>';
+  html += '<div style="display:flex;gap:10px;align-items:center"><span style="color:#7b8db5" id="'+prefix+'_wc">0 Wörter</span></div>';
+
+  html += '</div>';
+  html += '<button class="btn btn-red" style="margin-top:15px" onclick="unicertMockSubmit(\''+prefix+'\', '+(data.reading.questions.length+data.grammar.questions.length)+', \''+prefix+'_writing\')">📊 提交评分</button>';
+  html += '<div id="'+prefix+'_result" style="margin-top:12px"></div>';
+
+  container.innerHTML = html;
+
+  // Setup word counter
+  var ta = document.getElementById(prefix+'_writing');
+  if (ta) { ta.oninput = function(){ document.getElementById(prefix+'_wc').textContent = ta.value.split(/\\s+/).filter(function(x){return x.length>0;}).length + ' Wörter'; }; }
+
+  // Setup test state
+  window.testState[prefix+'_r'] = {questions:rqs, answers:new Array(rqs.length).fill(null)};
+  window.testState[prefix+'_g'] = {questions:gqs, answers:new Array(gqs.length).fill(null)};
+  window.testScores[prefix+'_r'] = 0;
+  window.testScores[prefix+'_g'] = 0;
+}
+
+function unicertSelect(prefix, idx, optIdx) {
+  var state = window.testState[prefix];
+  if (!state || state.answers[idx] !== null) return;
+  var q = state.questions[idx];
+  var correct = optIdx === q.a;
+  state.answers[idx] = {correct:correct, userIdx:optIdx};
+  if (correct) { window.testScores[prefix] = (window.testScores[prefix]||0) + 1; }
+
+  var opts = document.querySelectorAll('.q-option[data-prefix="'+prefix+'"][data-idx="'+idx+'"]');
+  if (correct) {
+    opts[optIdx].classList.add('correct');
+  } else {
+    opts[optIdx].classList.add('wrong');
+    opts[q.a].classList.add('correct');
+    for (var i=0;i<opts.length;i++) opts[i].style.pointerEvents = 'none';
+  }
+  var fbEl = document.getElementById(prefix+'-fb-'+idx);
+  if (fbEl) { fbEl.innerHTML = (correct?'✅ ':'❌ ') + q.f; fbEl.style.display = 'block'; }
+}
+
+function unicertMockSubmit(prefix, totalQs, writingId) {
+  var scoreR = window.testScores[prefix+'_r'] || 0;
+  var scoreG = window.testScores[prefix+'_g'] || 0;
+  var totalR = window.testState[prefix+'_r'] ? window.testState[prefix+'_r'].questions.length : 5;
+  var totalG = window.testState[prefix+'_g'] ? window.testState[prefix+'_g'].questions.length : 8;
+  var pctR = Math.round(scoreR/totalR*100);
+  var pctG = Math.round(scoreG/totalG*100);
+
+  var ta = document.getElementById(writingId);
+  var wc = ta ? ta.value.split(/\\s+/).filter(function(x){return x.length>0;}).length : 0;
+  var writingFeedback = '';
+  if (wc === 0) {
+    writingFeedback = '⚠️ 写作未完成，请补写后重新评分。';
+  } else if (wc < 150) {
+    writingFeedback = '⚠️ 字数不足（'+wc+'词），B2要求200-300词，C1要求250-350词。请扩充内容。';
+  } else {
+    writingFeedback = '✅ 写作已完成（'+wc+'词）。请对照范文自行检查：链接词多样性、KII使用、Nominalisierung、结构完整性。';
+  }
+
+  var totalScore = scoreR + scoreG;
+  var pctOverall = Math.round(totalScore / (totalR+totalG) * 100);
+  var grade = pctOverall >= 80 ? '🥇 Sehr gut' : pctOverall >= 60 ? '🥈 Gut' : pctOverall >= 40 ? '🥉 Befriedigend' : '⚠️ Nicht bestanden';
+
+  var el = document.getElementById(prefix+'_result');
+  el.innerHTML = '<h2 style="color:'+(pctOverall>=60?'#22c55e':'#e94560')+'">'+grade+' — '+totalScore+'/'+(totalR+totalG)+' ('+pctOverall+'%)</h2>'
+    + '<p>📖 Leseverstehen: '+scoreR+'/'+totalR+' ('+pctR+'%)</p>'
+    + '<p>📝 Grammatik: '+scoreG+'/'+totalG+' ('+pctG+'%)</p>'
+    + '<p>✍️ Textproduktion: '+writingFeedback+'</p>'
+    + '<div class="'+(pctOverall>=60?'tip':'warn')+'">'
+    + (pctOverall>=80 ? '<b>Glückwunsch!</b> Du bist auf sehr gutem Weg zur UNIcert-Prüfung. Weiter so!' :
+       pctOverall>=60 ? '<b>Gut gemacht!</b> Konzentriere dich auf deine Schwachpunkte und wiederhole die Übungen.' :
+       '<b>Noch nicht bestanden.</b> Arbeite gezielt an den Fehlerschwerpunkten. Wiederhole die Grammatik- und Lesestrategien.')
+    + '</div>';
+
+  // Save to error bank
+  ['_r','_g'].forEach(function(suffix){
+    var st = window.testState[prefix+suffix];
+    if (!st) return;
+    st.answers.forEach(function(ans,i){
+      if (!ans || !ans.correct) {
+        var eq = st.questions[i];
+        var errs = JSON.parse(localStorage.getItem('de-errorbank')||'[]');
+        errs.push({q:eq.q, o:eq.o, a:eq.a, f:eq.f, date:new Date().toISOString(), source:'UNIcert '+prefix+' Mock'});
+        if (errs.length > 500) errs = errs.slice(-500);
+        localStorage.setItem('de-errorbank', JSON.stringify(errs));
+      }
+    });
+  });
+}
+
+// ===== B2 Listening Renderer =====
+function renderUnicertB2Listening() {
+  var container = document.getElementById('unicert-b2-listening-container');
+  if (!container) return;
+  var html = '';
+  unicertB2ListeningData.forEach(function(unit, ui){
+    var uid = 'ub2lv_'+ui;
+    html += '<div class="quiz"><h3>'+unit.title+'</h3>';
+    html += '<p style="color:#7b8db5;font-size:.78em">'+unit.audioDesc+'</p>';
+    html += '<details><summary style="cursor:pointer;color:#f39c12">📝 Transkript anzeigen/ausblenden</summary>';
+    html += '<div class="code-block" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">'+unit.transcript+'</div></details>';
+    html += '<h4>Fragen (先读题，再听!)</h4>';
+    var lqs = [];
+    unit.questions.forEach(function(q,i){
+      html += '<div style="margin:8px 0"><b>'+(i+1)+'. '+q.q+'</b></div>';
+      q.o.forEach(function(o,k){
+        html += '<div class="q-option" data-prefix="'+uid+'" data-idx="'+i+'" data-opt="'+k+'" onclick="unicertSelect(\''+uid+'\','+i+','+k+')">'+String.fromCharCode(65+k)+'. '+o+'</div>';
+      });
+      html += '<div class="q-feedback" id="'+uid+'-fb-'+i+'"></div>';
+      lqs.push({q:q.q, o:q.o, a:q.a, f:'Richtige Antwort: '+String.fromCharCode(65+q.a)+'. '+q.o[q.a]});
+    });
+    html += '</div>';
+    window.testState[uid] = {questions:lqs, answers:new Array(lqs.length).fill(null)};
+    window.testScores[uid] = 0;
+  });
+  html += '<div class="tip"><b>🎧 HV考试策略：</b><br>1. 听力前先读题——题目告诉你需要听什么<br>2. 第一遍抓大意 + 关键词，第二遍确认答案<br>3. 数字、百分比、名称是高频考点<br>4. 注意否定词 (nicht, kaum, keinesfalls) —— 可能反转意思</div>';
+  container.innerHTML = html;
+}
+
+// ===== Reading Skill Training Renderer =====
+function renderUnicertSkillReading() {
+  var container = document.getElementById('unicert-skill-reading-container');
+  if (!container) return;
+  var html = '<h2>📚 阅读题型分类训练</h2><p>共 '+unicertSkillReadingQ.length+' 个训练单元，覆盖标题匹配、判断正误、简答题三种题型。</p>';
+
+  unicertSkillReadingQ.forEach(function(unit, ui){
+    var uid = 'uskr_'+ui;
+    html += '<div class="quiz"><h4>#'+(ui+1)+' '+unit.topic+' — '+(unit.type==='heading'?'标题匹配':unit.type==='tf'?'判断正误':'简答')+'</h4>';
+
+    if (unit.type === 'heading') {
+      html += '<div style="margin:8px 0"><b>Überschriften:</b><ul>';
+      unit.headings.forEach(function(hd){html+='<li>'+hd+'</li>';});
+      html += '</ul></div>';
+      unit.texts.forEach(function(t,j){
+        html += '<div style="margin:8px 0"><b>Text '+(j+1)+':</b> '+t+'<br><span style="color:#7b8db5;font-size:.78em">→ '+unit.headings[unit.answers[j]]+'</span></div>';
+      });
+    } else if (unit.type === 'tf') {
+      html += '<div class="code-block" style="max-height:200px;overflow-y:auto;white-space:pre-wrap">'+unit.text+'</div>';
+      unit.sts.forEach(function(s,j){
+        var c = s.answer==='r'?'#22c55e':'#ef4444';
+        html += '<div class="q-option" data-prefix="'+uid+'" data-idx="'+j+'" data-opt="'+(s.answer==='r'?0:1)+'" onclick="unicertSelect(\''+uid+'\','+j+','+(s.answer==='r'?0:1)+')">'+s.text+' → <b>'+(s.answer==='r'?'Richtig':'Falsch')+'</b></div>';
+      });
+      // Setup test state for TF
+      var tfqs = unit.sts.map(function(s,j){
+        return {q:s.text, o:[s.answer==='r'?'Richtig':'Falsch', s.answer==='r'?'Falsch':'Richtig'], a:0, f:s.answer==='r'?'Richtig':'Falsch'};
+      });
+      window.testState[uid] = {questions:tfqs, answers:new Array(tfqs.length).fill(null)};
+      window.testScores[uid] = 0;
+    } else if (unit.type === 'sa') {
+      html += '<div class="code-block" style="max-height:200px;overflow-y:auto;white-space:pre-wrap">'+unit.text+'</div>';
+      unit.qs.forEach(function(q,j){
+        html += '<div style="margin:6px 0"><b>Q:</b> '+q.q+' <span style="color:#22c55e">→ '+q.answer+'</span></div>';
+      });
+      html += '<div class="tip" style="font-size:.8em">'+unit.fb+'</div>';
+    }
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+// ===== Grammar Skill Training Renderer =====
+function renderUnicertSkillGrammar() {
+  var container = document.getElementById('unicert-skill-grammar-container');
+  if (!container) return;
+  var html = '';
+
+  var keys = ['verbalisierung','passiv','partizip','konjunktiv','irreal'];
+  keys.forEach(function(key){
+    var sec = unicertSkillGrammar[key];
+    html += '<div class="quiz"><h3>'+sec.title+'</h3><p>'+sec.desc+'</p><table><tr><th>#</th><th>Aufgabe</th><th>Lösung</th></tr>';
+    sec.items.forEach(function(it,i){
+      html += '<tr><td>'+(i+1)+'</td><td>'+it.q+'</td><td style="color:#22c55e">'+it.a+'</td></tr>';
+    });
+    html += '</table></div>';
+  });
+  container.innerHTML = html;
 }
 
 function checkWriting() {
