@@ -341,6 +341,19 @@ function pullAndMerge(user) {
   });
 }
 
+auth.getRedirectResult().then(function(result) {
+  // Handle successful redirect sign-in
+  if (result && result.user) {
+    console.log('Redirect sign-in successful:', result.user.email);
+  }
+}).catch(function(error) {
+  console.error('Redirect sign-in error:', error.message);
+  if (error.code === 'auth/account-exists-with-different-credential') {
+    var erEl = document.getElementById('auth-error');
+    if (erEl) { erEl.textContent = 'Ein Konto mit dieser E-Mail existiert bereits (andere Anmeldemethode).'; erEl.style.display = 'block'; }
+  }
+});
+
 // Auth state changes
 auth.onAuthStateChanged(function(user) {
   setSyncUI(user);
@@ -1753,6 +1766,9 @@ const unicertSkillGrammar = {
   ]}
 };
 
+// ===== CONTENT PAGES =====
+const P = {};
+
 // ===== UNIcert Page Functions =====
 P['unicert_hub'] = function(){
   var h = '<h1>🎓 UNIcert-CN 备考中心</h1>';
@@ -1819,10 +1835,6 @@ P['unicert_c1_format'] = function(){
   return h;
 };
 
-// ===== CONTENT PAGES =====
-const P = {};
-
-// ===== UNIcert Page Functions =====
 P['unicert_b2_reading'] = function(){
   var e = unicertB2LV;
   var h = '<h1>'+e.title+'</h1><p style="color:#f39c12">⏱ '+e.time+'</p>';
